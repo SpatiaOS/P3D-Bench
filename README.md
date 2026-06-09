@@ -5,8 +5,8 @@
 **Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning**
 
 [![Project Page](https://img.shields.io/badge/🌐%20Project-Page-blue.svg)](https://lucasqaq.github.io/p3d/)
-[![arXiv](https://img.shields.io/badge/arXiv-coming%20soon-b31b1b.svg)](#citation)
-[![Data](https://img.shields.io/badge/🤗%20P3D--Dataset-coming%20soon-yellow.svg)](#data)
+[![arXiv](https://img.shields.io/badge/arXiv-coming%20soon-b31b1b.svg?logo=arxiv)](#citation)
+[![Dataset](https://img.shields.io/badge/🤗%20P3D--Dataset-coming%20soon-yellow.svg)](#dataset)
 
 Yikang Yang<sup>1,†</sup> · Zhanpeng Hu<sup>1,†</sup> · Youtian Lin<sup>1</sup> · Mengqi Zhou<sup>1</sup> · Jingxi Xu<sup>2</sup> · Feihu Zhang<sup>2</sup> · Jiaheng Liu<sup>1</sup> · Yao Yao<sup>1,‡</sup>
 
@@ -20,144 +20,97 @@ Yikang Yang<sup>1,†</sup> · Zhanpeng Hu<sup>1,†</sup> · Youtian Lin<sup>1<
 
 </div>
 
-P3D-Bench is a benchmark for evaluating multimodal LLMs on **parametric 3D CAD
-generation**. A model is given a condition (text, image, or image + part-level text),
-writes a program in an **executable CAD format**, and the program is compiled, rendered,
-and scored against ground-truth geometry across five metric buckets.
+---
 
-This repository is a **lightweight, pure-evaluation demo**. It is deliberately modular:
-you can evaluate **one task × one output format × one metric bucket** in isolation. It
-contains no training, data-curation, refinement, or dashboard code — just the evaluation
-core plus a small demo split. The full **P3D-Dataset** is hosted on HuggingFace.
+## News
 
-<div align="center">
-<img src="assets/overview.png" width="100%" alt="P3D-Bench overview: three tasks, evaluated models and output formats, and the evaluation metric buckets (Geometry, Topology, Judge, Part)."/>
-</div>
+- **[2026-06]** 🎉 Our paper is released on arXiv! _(link coming soon)_
+- **[2026-06]** 🚀 P3D-Bench lightweight evaluation code (demo) is now available.
+- **[2026-06]** 🤗 The full **P3D-Dataset** will be released on HuggingFace soon.
 
 ---
 
-## Quick Start
+## Abstract
+
+Multimodal large language models can write code to produce complex programs as well as
+use programs to do 3D modeling, which opens up a new avenue for 3D generation powered by
+their priors, world knowledge and reasoning. Yet existing benchmarks rarely evaluate 3D
+modeling through code. Such modeling demands more than runnable code: from a text or
+visual specification, a model must generate a parametric 3D program that is geometrically
+precise, semantically aligned and assembly-consistent.
+
+We introduce **P3D-Bench**, a benchmark for parametric 3D generation. Unlike a 3D mesh, a
+parametric 3D program exposes explicit dimensions, construction operations and part
+relations, revealing whether a model recovers a design's structure, not just its
+appearance. Under a unified protocol, P3D-Bench covers three task families
+(**Text-to-3D**, **Image-to-3D** and **Assembly-3D**) and scores each output for
+executability, geometric fidelity, topology, text-grounded constraints, multiview
+semantic alignment and part-level structure. We evaluate frontier MLLMs and text-only LLMs
+on **400 text cases, 400 image cases and 203 annotated assemblies**, with domain-specific
+models as reference points.
+
+Our extensive evaluation yields three findings. First, assemblies are the hardest setting,
+where models still fail to compose multiple parts into a coherent structure. Second, models
+can often recover the global shape and semantic identity of the target object, yet fail to
+reproduce the precise parametric geometry specified by the input. Third, part-level
+modeling remains weak on assemblies, where models recover neither the geometry of each part
+nor the right number of parts.
+
+---
+
+## Environment Setup
+
+### 1. Install
 
 ```bash
-# 1. Install (Python 3.10+). uv recommended.
-uv sync                       # or: pip install -e .
+git clone https://github.com/SpatiaOS/P3D-Bench.git
+cd P3D-Bench
 
-# 2. Configure API keys (key NAMES are in the file; fill in values locally)
-cp .env.example .env          # then edit .env
+# create an environment (conda or venv)
+conda create -n p3dbench python=3.10 -y
+conda activate p3dbench
 
-# 3. Get the demo data (full split: see "Data" below)
-uv run p3dbench download --split demo
-
-# 4. Run one task × one format × one metric, end-to-end
-uv run p3dbench run \
-  --task image-to-3d --format openscad --metric geometry \
-  --model gpt-4o --split demo
+# core install (CLI + model adapters + config)
+pip install -e .
 ```
 
-The `run` command chains the four stages and writes results under `results/<run-id>/`.
-
----
-
-## Tasks
-
-| Task            | CLI slug       | Input                              | Output             | Main metrics                                  |
-|-----------------|----------------|------------------------------------|--------------------|-----------------------------------------------|
-| **Text-to-3D**  | `text-to-3d`   | Text specification                 | CAD program        | Valid, Geometry, Topology, Judge (QA-S/QA-P)  |
-| **Image-to-3D** | `image-to-3d`  | Rendered image                     | CAD program        | Valid, Geometry, Topology, Judge (J-Geo/J-Sem)|
-| **Assembly-3D** | `assembly-3d`  | Image + part-level text annotations| Multi-part program | Part (PartMatchF1, PartFS) + all of the above |
-
-Assembly-3D adds a fixed **decomposition** step: a frozen MLLM splits the predicted
-assembly into per-part programs so part-level matching can be scored. See
-[docs/TASKS.md](docs/TASKS.md).
-
----
-
-## Output formats
-
-Each task emits one of four executable formats. A format module knows how to extract code
-from the raw model response and compile it to STEP/STL.
-
-| Format        | CLI slug       | Compiler / runtime          | Install extra            |
-|---------------|----------------|-----------------------------|--------------------------|
-| minimal JSON  | `minimal-json` | sketch-extrude → OCC (STEP) | `p3dbench[geometry]`     |
-| OpenSCAD      | `openscad`     | `openscad` CLI              | system `openscad` binary |
-| CadQuery      | `cadquery`     | CadQuery / OCP              | `p3dbench[cadquery]`     |
-| Three.js      | `threejs`      | Node.js + vendored three.js | Node.js runtime          |
-
-Not every task supports every format; the CLI validates `--format` against the task's
-`supported_formats`. See [docs/FORMATS.md](docs/FORMATS.md).
-
----
-
-## Metrics
-
-Metrics are grouped into buckets. `Valid` is a gate (a prediction that does not compile
-and render scores zero on geometry/topology). Select a bucket with `--metric <bucket>` or
-`--metric all`.
-
-| Bucket       | CLI slug   | Metrics                               | Requires                  |
-|--------------|------------|---------------------------------------|---------------------------|
-| **Valid**    | `valid`    | executable validity (gate)            | compile                   |
-| **Geometry** | `geometry` | CD, F@.05, F@.01, NC, IoU             | mesh (STL)                |
-| **Topology** | `topology` | NoOE, InvN, NM                        | mesh (STL)                |
-| **Judge**    | `judge`    | QA-S, QA-P, J-Sem, J-Geo, J-Aes       | multiview render + judge model |
-| **Part**     | `part`     | PartMatchF1, PartFS                   | per-part meshes (Assembly-3D) |
-
-See [docs/METRICS.md](docs/METRICS.md) for exact definitions and alignment details.
-
----
-
-## Modular evaluation
-
-The defining feature of P3D-Bench is that **task, format, and metric are independent**.
-Run a full pipeline in one command, or run each stage on its own and reuse cached
-intermediates.
-
-One combination, end-to-end:
+Heavy geometry/render dependencies are **optional extras**, installed only for the metric
+buckets that need them. A metric whose dependency is missing reports it clearly instead of
+crashing.
 
 ```bash
-p3dbench run --task image-to-3d --format openscad --metric geometry --model gpt-4o
+pip install -e ".[geometry]"   # OCC/OCP + trimesh → Geometry / Topology / Part metrics
+pip install -e ".[render]"     # pyrender / Blender → Judge multiview renders
+pip install -e ".[cadquery]"   # CadQuery output format
+pip install -e ".[all]"        # everything
 ```
 
-Or stage-by-stage (each stage reads/writes a JSONL artifact — no hidden state):
+External runtimes (not pip extras): the **`openscad`** binary for the OpenSCAD format, and
+**Node.js** for the Three.js format.
 
-```bash
-p3dbench infer     --task text-to-3d --format cadquery --model gpt-4o   # → predictions.jsonl
-p3dbench compile   --pred predictions.jsonl                              # → compiled.jsonl
-p3dbench score     --compiled compiled.jsonl --metric topology           # → metrics.jsonl
-p3dbench summarize --metrics metrics.jsonl                               # → summary.json
-```
-
-Useful flags:
-
-- `--metric {valid,geometry,topology,judge,part,all}` — score a single bucket or all.
-- `--limit N` — only the first N cases (smoke testing).
-- `--dry-run` — build prompts / validate config without calling any model.
-- `--split {demo,full}` — demo ships in-repo; full pulls from HuggingFace.
-
-Because scoring reads a `compiled.jsonl`, you can re-score the *same* predictions under a
-different metric bucket without re-running inference.
-
----
-
-## API configuration
+### 2. API keys
 
 Bring your own keys. **Secrets never go in YAML** — `configs/models.yaml` holds only
-metadata (provider, model id, base URL, the *name* of the env var to read the key from),
-and `.env.example` lists the key names.
-
-`.env.example` (copy to `.env` and fill in):
+metadata (provider, model id, base URL, and the *name* of the env var that holds the key);
+`.env.example` lists the key names.
 
 ```bash
+cp .env.example .env            # then fill in your keys
+```
+
+```bash
+# .env  (key NAMES only; values stay local)
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 GEMINI_API_KEY=
-OPENROUTER_API_KEY=        # any OpenAI-compatible router
-HF_TOKEN=                  # for downloading the full split
+OPENROUTER_API_KEY=             # any OpenAI-compatible router
+HF_TOKEN=                       # to download the full split
 P3DBENCH_CACHE_DIR=.cache/p3dbench
 ```
 
-`configs/models.yaml` (metadata only):
+Register a model by adding a block to `configs/models.yaml` and the matching key in `.env`.
+Any OpenAI-compatible endpoint (OpenRouter, vLLM, LM Studio, …) works via the
+`openai_compatible` provider:
 
 ```yaml
 models:
@@ -166,25 +119,72 @@ models:
     model: gpt-4o
     api_key_env: OPENAI_API_KEY
     base_url: https://api.openai.com/v1
-    max_output_tokens: 4096
     temperature: 0.0
 
-  my-local-model:                       # any OpenAI-compatible endpoint
+  my-local-model:
     provider: openai_compatible
     model: qwen2.5-vl-instruct
     api_key_env: OPENROUTER_API_KEY
     base_url: https://your-router.example.com/v1
 ```
 
-Add a new model by adding a block here and the matching key in `.env`. See
-[docs/API.md](docs/API.md).
+---
+
+## Quick Start
+
+<div align="center">
+<img src="assets/overview.png" width="100%" alt="P3D-Bench overview: three tasks, evaluated models and output formats, and the evaluation metric buckets (Geometry, Topology, Judge, Part)."/>
+</div>
+
+An evaluation run is defined by three orthogonal choices — **task**, **output format**, and
+**metric bucket** — that you pin independently from the CLI:
+
+| Axis        | Flag       | Choices |
+|-------------|------------|---------|
+| **Task**    | `--task`   | `text-to-3d` · `image-to-3d` · `assembly-3d` |
+| **Format**  | `--format` | `minimal-json` · `openscad` · `cadquery` · `threejs` |
+| **Metric**  | `--metric` | `valid` · `geometry` · `topology` · `judge` · `part` · `all` |
+
+> `geometry` = CD, F@.05, F@.01, NC, IoU · `topology` = NoOE, InvN, NM ·
+> `judge` = QA-S, QA-P, J-Sem, J-Geo, J-Aes · `part` = PartMatchF1, PartFS (Assembly-3D only).
+> `valid` is an executability gate. The CLI validates `--format` against the task.
+
+**1. Get the demo data** (a few cases per task; full split on HuggingFace — see [Dataset](#dataset)):
+
+```bash
+p3dbench download --split demo
+```
+
+**2. Run one task × one format × one metric, end-to-end:**
+
+```bash
+p3dbench run --task image-to-3d --format openscad --metric geometry \
+  --model gpt-4o --split demo
+```
+
+`run` chains the four stages and writes results under `results/<run-id>/`. You can also run
+each stage on its own — every stage reads/writes a plain JSONL artifact, with no
+resume/checkpoint state — so you can re-score the *same* predictions under a different
+metric without re-running inference:
+
+```bash
+p3dbench infer     --task text-to-3d --format cadquery --model gpt-4o   # → predictions.jsonl
+p3dbench compile   --pred predictions.jsonl                              # → compiled.jsonl
+p3dbench score     --compiled compiled.jsonl --metric topology           # → metrics.jsonl
+p3dbench summarize --metrics metrics.jsonl                               # → summary.json
+```
+
+Useful flags: `--limit N` (first N cases), `--dry-run` (build prompts / validate config
+without calling a model), `--split {demo,full}`, `--model a,b,c` (compare models).
+
+For the full repository layout and module design, see [STRUCTURE.md](STRUCTURE.md).
 
 ---
 
-## Data
+## Dataset
 
-- **Demo split** (3–5 cases per task) ships in [`data/demo/`](data/demo/) with manifests
-  under [`data/manifests/`](data/manifests/). Enough to smoke-test the full pipeline.
+- **Demo split** (a few cases per task) ships in [`data/demo/`](data/demo/) with manifests
+  under [`data/manifests/`](data/manifests/) — enough to smoke-test the whole pipeline.
 - **Full P3D-Dataset** — 400 Text-to-3D / 400 Image-to-3D / 203 Assembly-3D cases,
   spanning easy → hard difficulty:
 
@@ -195,48 +195,15 @@ Add a new model by adding a block here and the matching key in `.env`. See
 > 🤗 **P3D-Dataset on HuggingFace: 🚧 Coming soon.**
 > `p3dbench download --split full` will fetch and checksum-verify it once published.
 
-GitHub holds code, configs, docs, the demo split, and data manifests. Ground-truth
-geometry, renders, and annotations live on HuggingFace. See [docs/DATA.md](docs/DATA.md)
-for the manifest schema and licensing/removal policy.
+GitHub holds the code, configs, demo split, and data manifests; ground-truth geometry,
+renders, and annotations are hosted on HuggingFace.
 
 ---
-
-## Installation extras
-
-The core install is light. Heavy geometry/render dependencies are optional and only
-needed for the buckets that use them; a metric that needs a missing dependency degrades
-gracefully with a clear message rather than crashing.
-
-```bash
-pip install p3dbench                       # core: CLI, model adapters, config
-pip install p3dbench[geometry]             # OCC/OCP + trimesh → Geometry/Topology/Part
-pip install p3dbench[render]               # pyrender / Blender → Judge renders
-pip install p3dbench[cadquery]             # CadQuery format
-pip install p3dbench[all]                  # everything
-```
-
-OpenSCAD and Three.js need external runtimes (`openscad` binary, Node.js) rather than pip
-extras.
-
----
-
-## Citation
-
-If you use P3D-Bench, please cite our paper (arXiv link 🚧 coming soon; see also the
-[project page](https://lucasqaq.github.io/p3d/) and [CITATION.cff](CITATION.cff)):
-
-```bibtex
-@article{p3d,
-  title   = {P3D: Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning},
-  journal = {arXiv preprint arXiv:XXXX.XXXXX},
-  year    = {2026}
-}
-```
 
 ## License
 
 Code and data are licensed separately, and the data follows the terms of its upstream
-sources (**non-commercial use only, with attribution**):
+sources (**non-commercial research use only, with attribution**):
 
 | Component | Source | License |
 |-----------|--------|---------|
@@ -246,10 +213,20 @@ sources (**non-commercial use only, with attribution**):
 
 Both dataset sources permit **non-commercial research use only** and require
 **attribution**; redistributed portions and modifications must carry the same
-restrictions. By using the P3D-Dataset you agree to the upstream license terms. See
-[docs/DATA.md](docs/DATA.md) for attribution text and the data-removal policy.
+restrictions. By using the P3D-Dataset you agree to the upstream license terms.
 
-## Documentation
+---
 
-[DATA](docs/DATA.md) · [TASKS](docs/TASKS.md) · [FORMATS](docs/FORMATS.md) ·
-[METRICS](docs/METRICS.md) · [API](docs/API.md) · [STRUCTURE](STRUCTURE.md)
+## Citation
+
+If you find P3D-Bench useful, please cite our paper (arXiv link 🚧 coming soon):
+
+```bibtex
+@article{p3d,
+  title   = {P3D: Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning},
+  author  = {Yang, Yikang and Hu, Zhanpeng and Lin, Youtian and Zhou, Mengqi and
+             Xu, Jingxi and Zhang, Feihu and Liu, Jiaheng and Yao, Yao},
+  journal = {arXiv preprint arXiv:XXXX.XXXXX},
+  year    = {2026}
+}
+```
