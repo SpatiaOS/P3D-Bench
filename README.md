@@ -143,9 +143,7 @@ An evaluation run is defined by three orthogonal choices — **task**, **output 
 | **Format**  | `--format` | `minimal-json` · `openscad` · `cadquery` · `threejs` |
 | **Metric**  | `--metric` | `valid` · `geometry` · `topology` · `judge` · `part` · `all` |
 
-> `geometry` = CD, F@.05, F@.01, NC, IoU · `topology` = NoOE, InvN, NM ·
-> `judge` = QA-S, QA-P, J-Sem, J-Geo, J-Aes · `part` = PartMatchF1, PartFS (Assembly-3D only).
-> `valid` is an executability gate. The CLI validates `--format` against the task.
+The CLI validates `--format` against the chosen task's supported formats.
 
 **1. Get the demo data** (a few cases per task; full split on HuggingFace — see [Dataset](#dataset)):
 
