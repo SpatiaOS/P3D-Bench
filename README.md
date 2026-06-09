@@ -26,24 +26,6 @@ you can evaluate **one task × one output format × one metric bucket** in isola
 contains no training, data-curation, refinement, or dashboard code — just the evaluation
 core plus a small demo split. The full **P3D-Dataset** is hosted on HuggingFace.
 
-🌐 **Project page:** https://lucasqaq.github.io/p3d/
-
----
-
-## Highlights
-
-- **3 tasks** — Text-to-3D, Image-to-3D, Assembly-3D.
-- **4 executable CAD formats** — minimal JSON, OpenSCAD, CadQuery, Three.js.
-- **Geometry-grounded evaluation** — executability gate + geometry, topology,
-  MLLM-judge, and assembly-part metrics.
-- **Fully modular** — task, format, and metric are orthogonal registries; pin any single
-  combination from the CLI.
-- **Staged & cacheable** — `infer → compile → score → summarize`, each writing a plain
-  JSONL artifact. No resume/checkpoint/refine machinery.
-- **BYOK, any provider** — OpenAI, Anthropic, Gemini, and any OpenAI-compatible endpoint
-  (OpenRouter, vLLM, LM Studio, …). Keys live only in your environment.
-- **Demo split in-repo**, full benchmark data on HuggingFace.
-
 ---
 
 ## Quick Start
