@@ -24,7 +24,7 @@ Yikang Yang<sup>1,†</sup> · Zhanpeng Hu<sup>1,†</sup> · Youtian Lin<sup>1<
 
 ## News
 
-- **[2026-06]** 🎉 We released **P3D-Bench** — the paper (arXiv coming soon), the lightweight evaluation code, and the **P3D-Dataset** (on HuggingFace, coming soon).
+- **[2026-06]** 🎉 We released **P3D-Bench** — the paper (arXiv coming soon), the evaluation code, and the **P3D-Dataset** (on HuggingFace, coming soon).
 
 ---
 
