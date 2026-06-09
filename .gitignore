@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Env / secrets
+.env
+.cache/
+P3DBENCH_CACHE_DIR/
+
+# Results / outputs
+results/
+*.jsonl.tmp
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
