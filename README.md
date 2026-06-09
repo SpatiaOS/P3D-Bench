@@ -7,8 +7,12 @@
 [![Project Page](https://img.shields.io/badge/🌐%20Project-Page-blue.svg)](https://lucasqaq.github.io/p3d/)
 [![arXiv](https://img.shields.io/badge/arXiv-coming%20soon-b31b1b.svg)](#citation)
 [![Data](https://img.shields.io/badge/🤗%20P3D--Dataset-coming%20soon-yellow.svg)](#data)
-[![License](https://img.shields.io/badge/code-MIT-green.svg)](LICENSE)
-[![Data License](https://img.shields.io/badge/data-non--commercial-orange.svg)](#license)
+
+Yikang Yang<sup>1,†</sup> · Zhanpeng Hu<sup>1,†</sup> · Youtian Lin<sup>1</sup> · Mengqi Zhou<sup>1</sup> · Jingxi Xu<sup>2</sup> · Feihu Zhang<sup>2</sup> · Jiaheng Liu<sup>1</sup> · Yao Yao<sup>1,‡</sup>
+
+<sup>1</sup>Nanjing University &nbsp;&nbsp; <sup>2</sup>Envision
+
+<sub>† Equal contribution &nbsp;·&nbsp; ‡ Corresponding author</sub>
 
 <img src="assets/teaser.png" width="100%" alt="Per-task model scores across Text-to-3D, Image-to-3D, and Assembly-3D."/>
 
