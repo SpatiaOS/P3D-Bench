@@ -52,7 +52,8 @@ where models still fail to compose multiple parts into a coherent structure. Sec
 can often recover the global shape and semantic identity of the target object, yet fail to
 reproduce the precise parametric geometry specified by the input. Third, part-level
 modeling remains weak on assemblies, where models recover neither the geometry of each part
-nor the right number of parts.
+nor the right number of parts. These results position P3D-Bench as a benchmark for
+evaluating precise parametric geometry and part-level structure in parametric 3D generation.
 
 ---
 
