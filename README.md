@@ -82,17 +82,6 @@ assembly into per-part programs so part-level matching can be scored. See
 
 ---
 
-## Qualitative results
-
-Ground-truth vs. model predictions across the three tasks (rendered from the executed
-programs):
-
-<div align="center">
-<img src="assets/qualitative.png" width="78%" alt="Qualitative comparison of GT and model predictions across Text-to-3D, Image-to-3D, and Assembly-3D."/>
-</div>
-
----
-
 ## Output formats
 
 Each task emits one of four executable formats. A format module knows how to extract code
