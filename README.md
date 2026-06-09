@@ -16,7 +16,7 @@ Yikang Yang<sup>1,†</sup> · Zhanpeng Hu<sup>1,†</sup> · Youtian Lin<sup>1<
 
 <img src="assets/teaser.png" width="100%" alt="Per-task model scores across Text-to-3D, Image-to-3D, and Assembly-3D."/>
 
-<sub>Aggregate model scores on the three P3D-Bench tasks: Text-to-3D, Image-to-3D, Assembly-3D.</sub>
+<sub><b>Scores of different models across the three tasks in P3D-Bench.</b> The Score is the average of the four bucket scores (Geometry, Topology, Judge, Part), rescaled to 0–100.</sub>
 
 </div>
 
@@ -24,9 +24,7 @@ Yikang Yang<sup>1,†</sup> · Zhanpeng Hu<sup>1,†</sup> · Youtian Lin<sup>1<
 
 ## News
 
-- **[2026-06]** 🎉 Our paper is released on arXiv! _(link coming soon)_
-- **[2026-06]** 🚀 P3D-Bench lightweight evaluation code (demo) is now available.
-- **[2026-06]** 🤗 The full **P3D-Dataset** will be released on HuggingFace soon.
+- **[2026-06]** 🎉 We released **P3D-Bench** — the paper (arXiv coming soon), the lightweight evaluation code, and the **P3D-Dataset** (on HuggingFace, coming soon).
 
 ---
 
