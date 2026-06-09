@@ -187,12 +187,6 @@ without calling a model), `--split {demo,full}`, `--model a,b,c` (compare models
 <img src="assets/dataset_gallery.png" width="92%" alt="P3D-Dataset gallery spanning easy to hard difficulty for Text-to-3D and Image-to-3D."/>
 </div>
 
-> 🤗 **P3D-Dataset on HuggingFace: 🚧 Coming soon.**
-> `p3dbench download --split full` will fetch and checksum-verify it once published.
-
-GitHub holds the code, configs, demo split, and data manifests; ground-truth geometry,
-renders, and annotations are hosted on HuggingFace.
-
 ---
 
 ## License
