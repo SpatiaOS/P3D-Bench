@@ -30,6 +30,10 @@ you can evaluate **one task × one output format × one metric bucket** in isola
 contains no training, data-curation, refinement, or dashboard code — just the evaluation
 core plus a small demo split. The full **P3D-Dataset** is hosted on HuggingFace.
 
+<div align="center">
+<img src="assets/overview.png" width="100%" alt="P3D-Bench overview: three tasks, evaluated models and output formats, and the evaluation metric buckets (Geometry, Topology, Judge, Part)."/>
+</div>
+
 ---
 
 ## Quick Start
