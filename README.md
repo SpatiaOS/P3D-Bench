@@ -177,8 +177,6 @@ p3dbench summarize --metrics metrics.jsonl                               # → s
 Useful flags: `--limit N` (first N cases), `--dry-run` (build prompts / validate config
 without calling a model), `--split {demo,full}`, `--model a,b,c` (compare models).
 
-For the full repository layout and module design, see [STRUCTURE.md](STRUCTURE.md).
-
 ---
 
 ## Dataset
