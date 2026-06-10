@@ -1,0 +1,40 @@
+# Model registry — METADATA ONLY. Secrets never go here: api_key_env names the
+# environment variable (see .env.example) that holds the actual key.
+#
+# Register a model by adding a block here + the matching key in .env. Any
+# OpenAI-compatible endpoint (OpenRouter, vLLM, LM Studio, ...) works via the
+# `openai_compatible` provider with its base_url.
+
+models:
+  gpt-4o:
+    provider: openai            # alias for openai_compatible
+    model: gpt-4o
+    api_key_env: OPENAI_API_KEY
+    base_url: https://api.openai.com/v1
+    temperature: 0.0
+    max_tokens: 16384
+
+  claude-opus-4-6:
+    provider: anthropic
+    model: claude-opus-4-6
+    api_key_env: ANTHROPIC_API_KEY
+    base_url: https://api.anthropic.com/v1
+    temperature: 0.0
+    max_tokens: 16384
+
+  gemini-3.1-pro:
+    provider: gemini
+    model: gemini-3.1-pro-preview
+    api_key_env: GEMINI_API_KEY
+    base_url: https://generativelanguage.googleapis.com/v1beta
+    temperature: 0.0
+    max_tokens: 16384
+
+  # Example: any OpenAI-compatible router (OpenRouter, vLLM, LM Studio, ...).
+  my-local-model:
+    provider: openai_compatible
+    model: qwen2.5-vl-instruct
+    api_key_env: OPENROUTER_API_KEY
+    base_url: https://your-router.example.com/v1
+    temperature: 0.0
+    max_tokens: 16384

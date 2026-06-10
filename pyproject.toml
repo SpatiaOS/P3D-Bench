@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "p3dbench"
+version = "0.1.0"
+description = "P3D-Bench: Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "P3D-Bench Authors" }]
+keywords = ["benchmark", "3d", "cad", "multimodal", "llm"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering",
+]
+
+# Core install: CLI + model adapters + config. Heavy geometry/render stacks
+# are optional extras; a metric whose dependency is missing reports it
+# clearly instead of crashing.
+dependencies = [
+    "requests>=2.28",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Geometry / Topology / Part metric buckets + STEP handling + minimal-json compile.
+geometry = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "trimesh>=4.0",
+    "manifold3d>=2.0",
+    "cadquery>=2.4",
+]
+# Judge multiview renders (pyrender path; Blender is an external binary).
+render = [
+    "numpy>=1.24",
+    "trimesh>=4.0",
+    "pyrender>=0.1.45",
+    "pillow>=10.0",
+]
+# CadQuery output format (also pulled in by [geometry]).
+cadquery = ["cadquery>=2.4"]
+all = ["p3dbench[geometry,render,cadquery]"]
+
+[project.scripts]
+p3dbench = "p3dbench.cli:main"
+
+[project.urls]
+Homepage = "https://lucasqaq.github.io/p3d/"
+Repository = "https://github.com/SpatiaOS/P3D-Bench"
+Paper = "https://arxiv.org/abs/2606.11152"
+
+[tool.setuptools.packages.find]
+include = ["p3dbench*"]
+
+[tool.setuptools.package-data]
+p3dbench = ["compile/three/*.js", "compile/three/LICENSE"]
