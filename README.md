@@ -6,7 +6,7 @@
 
 [![Project Page](https://img.shields.io/badge/🌐%20Project-Page-blue.svg)](https://lucasqaq.github.io/p3d/)
 [![arXiv](https://img.shields.io/badge/arXiv-2606.11152-b31b1b.svg?logo=arxiv)](https://arxiv.org/abs/2606.11152)
-[![Dataset](https://img.shields.io/badge/🤗%20P3D--Dataset-coming%20soon-yellow.svg)](#dataset)
+[![Dataset](https://img.shields.io/badge/🤗%20P3D--Dataset-HuggingFace-yellow.svg)](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)
 
 <a href="https://kangyiyang.github.io/" target="_blank">Yikang Yang</a><sup>1,†</sup> · <a href="https://github.com/LucasQAQ" target="_blank">Zhanpeng Hu</a><sup>1,†</sup> · <a href="https://linyou.github.io" target="_blank">Youtian Lin</a><sup>1</sup> · <a href="https://scholar.google.com/citations?user=Cm4jMckAAAAJ&hl=zh-CN" target="_blank">Mengqi Zhou</a><sup>1</sup> · <a href="https://scholar.google.com/citations?user=4YPtwXYAAAAJ&hl=en&oi=ao" target="_blank">Jingxi Xu</a><sup>2</sup> · <a href="https://scholar.google.com/citations?user=nWT4vFcAAAAJ&hl=en" target="_blank">Feihu Zhang</a><sup>2</sup> · <a href="https://liujiaheng.github.io/" target="_blank">Jiaheng Liu</a><sup>1</sup> · <a href="https://yoyo000.github.io/" target="_blank">Yao Yao</a><sup>1,‡</sup>
 
@@ -24,7 +24,7 @@
 
 ## News
 
-- **[2026-06]** 🎉 We released **P3D-Bench** — the paper ([arXiv](https://arxiv.org/abs/2606.11152)), the evaluation code, and the **P3D-Dataset** (on HuggingFace, coming soon).
+- **[2026-06]** 🎉 We released **P3D-Bench** — the paper ([arXiv](https://arxiv.org/abs/2606.11152)), the evaluation code, and the **[P3D-Dataset](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)** on HuggingFace.
 
 ---
 
@@ -146,7 +146,7 @@ An evaluation run is defined by three orthogonal choices — **task**, **output 
 
 The CLI validates `--format` against the chosen task's supported formats.
 
-**1. Get the demo data** (a few cases per task; full split on HuggingFace — see [Dataset](#dataset)):
+**1. Get the demo data** (a few cases per task; full split on [HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench) — see [Dataset](#dataset)):
 
 ```bash
 p3dbench download --split demo
@@ -172,7 +172,8 @@ p3dbench summarize --metrics metrics.jsonl                               # → s
 ```
 
 Useful flags: `--limit N` (first N cases), `--dry-run` (build prompts / validate config
-without calling a model), `--split {demo,full}`, `--model a,b,c` (compare models).
+without calling a model), `--split {demo,full}`, `--text-mode {parametric,descriptive}`
+(Text-to-3D only — selects which metric panel is reported).
 
 ---
 
@@ -181,7 +182,9 @@ without calling a model), `--split {demo,full}`, `--model a,b,c` (compare models
 - **Demo split** (a few cases per task) ships in [`data/demo/`](data/demo/) with manifests
   under [`data/manifests/`](data/manifests/) — enough to smoke-test the whole pipeline.
 - **Full P3D-Dataset** — 400 Text-to-3D / 400 Image-to-3D / 203 Assembly-3D cases,
-  spanning easy → hard difficulty:
+  spanning easy → hard difficulty, on
+  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)
+  (`p3dbench download --split full`):
 
 <div align="center">
 <img src="assets/dataset_gallery.png" width="92%" alt="P3D-Dataset gallery spanning easy to hard difficulty for Text-to-3D and Image-to-3D."/>

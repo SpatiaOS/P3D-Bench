@@ -54,8 +54,9 @@ Run under a headless Node.js runtime that provides the same `scene/camera/
 renderer/controls` globals the browser viewer would; the scene is exported to STL
 via `STLExporter`. Per-part decomposition groups meshes under named `THREE.Group`s.
 
-**Vendored runtime:** the compiler expects `three.module.js`, `three.core.js` and
-`STLExporter.js` under `p3dbench/compile/three/`. They are **not** committed (size);
-without them (or without `node` on PATH) the Three.js compiler returns
-`valid=False` with a clear message. To enable it, drop a Three.js build into that
-directory — see the module docstring in `p3dbench/compile/exporter.py`.
+**Vendored runtime:** the compiler expects, under `p3dbench/compile/three/`, the two
+files `build/three.module.js` and `examples/jsm/exporters/STLExporter.js` (i.e. a
+standard Three.js distribution dropped into that directory). They are **not**
+committed (size); without them (or without `node` on PATH) the Three.js compiler
+returns `valid=False` with a clear message. See the module docstring in
+`p3dbench/compile/exporter.py` for the exact layout.

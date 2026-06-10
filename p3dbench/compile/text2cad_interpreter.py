@@ -30,7 +30,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from ..utils import require
 from .step_mesh import export_step_to_stl
@@ -57,9 +57,10 @@ def _build_workplane(euler_angles_deg, translation):
     cq = _cq()
     np = require("numpy", _GEOMETRY_EXTRA, "Text2CAD minimal-JSON compile")
 
+    # Matrix rows are the x-axis, y-axis, normal of the sketch plane (the
+    # dataset built the Euler angles as R.from_matrix(vstack(x, y, z)).as_euler).
     rot_matrix = R.from_euler("zyx", euler_angles_deg, degrees=True).as_matrix()
     x_axis = rot_matrix[0]
-    y_axis = rot_matrix[1]
     normal = rot_matrix[2]
     origin = np.array(translation, dtype=float)
 

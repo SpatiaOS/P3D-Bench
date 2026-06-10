@@ -6,9 +6,10 @@ Two splits:
   manifests in [`manifests/`](manifests/). Enough to smoke-test the whole
   pipeline (`p3dbench validate --split demo`).
 - **`full`** — the complete **P3D-Dataset** (400 Text-to-3D / 400 Image-to-3D /
-  203 Assembly-3D), hosted on **HuggingFace — coming soon**. Once published,
-  `p3dbench download --split full` will fetch geometry, renders, annotations and
-  QA banks into `data/full/` and verify checksums.
+  203 Assembly-3D), hosted on
+  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench).
+  `p3dbench download --split full` fetches geometry, renders, annotations and QA
+  banks into `data/full/`.
 
 ## Layout (per split, rooted at `data/<split>/`)
 

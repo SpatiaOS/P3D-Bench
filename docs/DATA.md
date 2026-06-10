@@ -42,7 +42,9 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
 
 - **demo** — 3 cases per task in-repo. `p3dbench validate --split demo` checks
   manifest integrity and that every referenced file exists.
-- **full** — 400 / 400 / 203 cases on HuggingFace (coming soon).
+- **full** — 400 / 400 / 203 cases on
+  [HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)
+  (`p3dbench download --split full`).
 
 ## Difficulty
 

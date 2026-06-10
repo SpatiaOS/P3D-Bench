@@ -5,7 +5,7 @@ single shared, aligned 8192-point cloud per mesh. The alignment is a
 ``pca+discrete`` search (48 signed-permutation rotations + a PCA-canonicalized
 path) followed by a bounded L-BFGS-B scale/translation refine.
 
-Faithful port of ``cadbenchmark/metrics/geometry_metrics.py`` with production
+Geometry + alignment metrics (CD, F-scores, NC, IoU). Stripped of production
 cruft stripped (thread RNG lock, dead STEP B-Rep analysis, legacy validity /
 single-case drivers, visible-view metrics, env-var overrides). Algorithms,
 constants and thresholds are preserved verbatim.

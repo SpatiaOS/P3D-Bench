@@ -1,7 +1,8 @@
 """Load cases from manifests and resolve their data paths.
 
 - ``demo`` split: manifests + data ship in-repo (``data/manifests/``, ``data/demo/``).
-- ``full`` split: the P3D-Dataset on HuggingFace (coming soon — see scripts/download_data.py).
+- ``full`` split: the P3D-Dataset on HuggingFace
+  (https://huggingface.co/datasets/SpatiaOS/P3D-Bench — see scripts/download_data.py).
 """
 
 from __future__ import annotations
@@ -88,7 +89,8 @@ def load_cases(
         if split == "full":
             raise FileNotFoundError(
                 f"Full-split manifest {path} not found. The P3D-Dataset is hosted on "
-                f"HuggingFace (coming soon). Run `p3dbench download --split full` once available."
+                f"HuggingFace (https://huggingface.co/datasets/SpatiaOS/P3D-Bench). "
+                f"Run `p3dbench download --split full` to fetch it."
             )
         raise FileNotFoundError(f"Manifest not found: {path}")
     root = data_root(split)

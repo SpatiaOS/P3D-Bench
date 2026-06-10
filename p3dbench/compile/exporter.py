@@ -19,11 +19,11 @@ Per-format part contracts parsed here:
   * threejs      -> a ``// parts_meta: [...]`` header + ``THREE.Group`` walk.
   * minimal-json -> a top-level ``parts_meta`` object grouping feature keys.
 
-Three.js runtime: see :mod:`p3dbench.compile.three` (this package's ``three/``
-subdir). The vendored ``build/three.module.js`` and
-``examples/jsm/exporters/STLExporter.js`` are required for STL export; if they
-(or ``node``) are absent the threejs path returns a clean invalid result. See
-``docs/FORMATS.md`` for the expected layout.
+Three.js runtime: an optional (uncommitted) ``three/`` data directory under this
+package. The files ``three/build/three.module.js`` and
+``three/examples/jsm/exporters/STLExporter.js`` are required for STL export; if
+they (or ``node``) are absent the threejs path returns a clean invalid result.
+See ``docs/FORMATS.md`` for the expected layout.
 
 Stripped from the research code: OpenSCAD concurrency cap / filelock, the
 DeepCAD legacy-JSON path, the OpenSCAD preview PNG (+ xvfb), the Three.js

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..utils import read_jsonl
-from .loader import _TASK_TOKEN, data_root, manifest_path
+from .loader import data_root, manifest_path
 from .schema import Case
 
 

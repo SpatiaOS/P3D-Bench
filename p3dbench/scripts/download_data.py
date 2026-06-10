@@ -2,15 +2,16 @@
 
 The demo split ships in-repo (``data/demo/`` + ``data/manifests/``). The full
 P3D-Dataset (400 Text-to-3D / 400 Image-to-3D / 203 Assembly-3D) is hosted on
-HuggingFace — *coming soon*. Once published this will pull it via the
-``datasets`` / ``huggingface_hub`` API and verify checksums.
+HuggingFace: https://huggingface.co/datasets/SpatiaOS/P3D-Bench . This pulls it
+via ``huggingface_hub.snapshot_download`` into ``data/full/``.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-HF_REPO_ID = "SpatiaOS/P3D-Dataset"  # placeholder — coming soon
+HF_REPO_ID = "SpatiaOS/P3D-Bench"
+HF_URL = f"https://huggingface.co/datasets/{HF_REPO_ID}"
 
 
 def download(split: str = "demo") -> None:
@@ -23,12 +24,27 @@ def download(split: str = "demo") -> None:
             print("Demo split missing — re-checkout the repo; data/demo/ is version-controlled.")
         return
 
-    print(
-        "The full P3D-Dataset is hosted on HuggingFace and is coming soon.\n"
-        f"  Repo (placeholder): https://huggingface.co/datasets/{HF_REPO_ID}\n"
-        "Once published, this command will download geometry/renders/annotations\n"
-        "into data/full/ and verify checksums. For now, use --split demo."
+    # Full split: fetch from HuggingFace into data/full/.
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError:
+        print(
+            f"The full P3D-Dataset is on HuggingFace: {HF_URL}\n"
+            "Install the client to download it automatically:\n"
+            "  pip install huggingface_hub\n"
+            "  p3dbench download --split full\n"
+            "or fetch manually:\n"
+            f"  huggingface-cli download {HF_REPO_ID} --repo-type dataset --local-dir data/full"
+        )
+        return
+
+    print(f"Downloading the full P3D-Dataset from {HF_URL} into data/full/ ...")
+    snapshot_download(
+        repo_id=HF_REPO_ID,
+        repo_type="dataset",
+        local_dir="data/full",
     )
+    print("Done. Run `p3dbench validate --split full` to verify.")
 
 
 if __name__ == "__main__":

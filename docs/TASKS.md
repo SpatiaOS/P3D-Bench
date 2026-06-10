@@ -26,6 +26,12 @@ Two text conditions per case, picked with `--text-mode`:
 
 The model receives the text plus the format's system guidelines; no image.
 
+> **Demo split note.** The full split ships both text conditions per case; the
+> in-repo **demo** split currently carries only the parametric text. On the demo
+> split `--text-mode descriptive` therefore selects the descriptive *metric panel*
+> but feeds the parametric text, and J-Sem requires the 4 GT renders that only the
+> full split provides. Use the parametric mode for demo smoke tests.
+
 ## Image-to-3D
 
 The model receives **one** rendered image (no text) and reproduces the object.

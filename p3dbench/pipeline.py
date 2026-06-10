@@ -156,7 +156,7 @@ def score(
             work_dir=case_dir,
             judge_client=judge_client,
             decompose_client=decompose_client,
-            shared={"stage1_code": row.get("code")},
+            shared={"stage1_code": row.get("code"), "text_mode": row.get("text_mode", "parametric")},
         )
         raw_metrics: dict = {}
         for bucket_name in buckets:
@@ -234,8 +234,12 @@ def _resolve_case(row: dict) -> ResolvedCase:
 
 
 def _try_client(model_name: str, config_dir: Path):
+    """Build a judge/decompose client, or None for a clean skip (e.g. no API key)."""
     try:
-        return get_client(model_name, config_dir)
+        client = get_client(model_name, config_dir)
+        _ = client.cfg.api_key  # validate the key is present up front
+        return client
     except Exception as exc:
-        logger.warning("could not build client '%s' (%s); judge/part will be skipped", model_name, exc)
+        logger.warning("judge/part client '%s' unavailable (%s); that bucket will be skipped",
+                       model_name, exc)
         return None
