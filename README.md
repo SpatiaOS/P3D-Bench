@@ -24,7 +24,7 @@
 
 ## News
 
-- **[2026-06]** 🎉 We released **P3D-Bench** — the paper ([arXiv](https://arxiv.org/abs/2606.11152)), the evaluation code, and the **[P3D-Dataset](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)** on HuggingFace.
+- **[2026-06]** 🎉 We released **P3D-Bench** — the paper ([arXiv](https://arxiv.org/abs/2606.11152)), the evaluation code, and the **[Dataset](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)** on HuggingFace.
 
 ---
 
