@@ -49,7 +49,7 @@ all = ["p3dbench[geometry,render,cadquery]"]
 p3dbench = "p3dbench.cli:main"
 
 [project.urls]
-Homepage = "https://lucasqaq.github.io/p3d/"
+Homepage = "https://spatiaos.github.io/projects/P3D-Bench/"
 Repository = "https://github.com/SpatiaOS/P3D-Bench"
 Paper = "https://arxiv.org/abs/2606.11152"
 
