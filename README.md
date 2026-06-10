@@ -5,7 +5,7 @@
 **Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning**
 
 [![Project Page](https://img.shields.io/badge/🌐%20Project-Page-blue.svg)](https://lucasqaq.github.io/p3d/)
-[![arXiv](https://img.shields.io/badge/arXiv-coming%20soon-b31b1b.svg?logo=arxiv)](#citation)
+[![arXiv](https://img.shields.io/badge/arXiv-2606.11152-b31b1b.svg?logo=arxiv)](https://arxiv.org/abs/2606.11152)
 [![Dataset](https://img.shields.io/badge/🤗%20P3D--Dataset-coming%20soon-yellow.svg)](#dataset)
 
 Yikang Yang<sup>1,†</sup> · Zhanpeng Hu<sup>1,†</sup> · Youtian Lin<sup>1</sup> · Mengqi Zhou<sup>1</sup> · Jingxi Xu<sup>2</sup> · Feihu Zhang<sup>2</sup> · Jiaheng Liu<sup>1</sup> · Yao Yao<sup>1,‡</sup>
@@ -24,7 +24,7 @@ Yikang Yang<sup>1,†</sup> · Zhanpeng Hu<sup>1,†</sup> · Youtian Lin<sup>1<
 
 ## News
 
-- **[2026-06]** 🎉 We released **P3D-Bench** — the paper (arXiv coming soon), the evaluation code, and the **P3D-Dataset** (on HuggingFace, coming soon).
+- **[2026-06]** 🎉 We released **P3D-Bench** — the paper ([arXiv](https://arxiv.org/abs/2606.11152)), the evaluation code, and the **P3D-Dataset** (on HuggingFace, coming soon).
 
 ---
 
@@ -208,14 +208,16 @@ restrictions. By using the P3D-Dataset you agree to the upstream license terms.
 
 ## Citation
 
-If you find P3D-Bench useful, please cite our paper (arXiv link 🚧 coming soon):
+If you find P3D-Bench useful, please cite our paper:
 
 ```bibtex
-@article{p3d,
-  title   = {P3D: Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning},
-  author  = {Yang, Yikang and Hu, Zhanpeng and Lin, Youtian and Zhou, Mengqi and
-             Xu, Jingxi and Zhang, Feihu and Liu, Jiaheng and Yao, Yao},
-  journal = {arXiv preprint arXiv:XXXX.XXXXX},
-  year    = {2026}
+@misc{yang2026p3dbenchbenchmarkingmllmsparametric,
+      title={P3D-Bench: Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning}, 
+      author={Yikang Yang and Zhanpeng Hu and Youtian Lin and Mengqi Zhou and Jingxi Xu and Feihu Zhang and Jiaheng Liu and Yao Yao},
+      year={2026},
+      eprint={2606.11152},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2606.11152}, 
 }
 ```
