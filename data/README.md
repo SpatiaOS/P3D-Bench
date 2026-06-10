@@ -1,15 +1,14 @@
 # P3D-Dataset
 
-Two splits:
+Current data support:
 
 - **`demo`** — 3 cases per task, shipped in-repo under [`demo/`](demo/) with
   manifests in [`manifests/`](manifests/). Enough to smoke-test the whole
   pipeline (`p3dbench validate --split demo`).
-- **`full`** — the complete **P3D-Dataset** (400 Text-to-3D / 400 Image-to-3D /
-  203 Assembly-3D), hosted on
-  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench).
-  `p3dbench download --split full` fetches geometry, renders, annotations and QA
-  banks into `data/full/`.
+- **`full`** — metadata for the complete **P3D-Dataset** is hosted on
+  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench), but the full
+  geometry/render/QA assets are not currently published in the manifest layout consumed by
+  this evaluator. Full-split evaluation is therefore not enabled in this release.
 
 ## Layout (per split, rooted at `data/<split>/`)
 

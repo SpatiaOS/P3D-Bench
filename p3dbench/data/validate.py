@@ -19,6 +19,8 @@ def validate_split(split: str = "demo", manifest_dir: Path = Path("data/manifest
         task_report = {"manifest": str(path), "cases": 0, "missing_files": 0}
         if not path.exists():
             task_report["status"] = "missing"
+            report["ok"] = False
+            report["problems"].append(f"{task}: missing manifest {path}")
             report["tasks"][task] = task_report
             continue
         seen_ids: set[str] = set()

@@ -3,7 +3,7 @@
 P3D-Bench covers three task families under one protocol. Each is selected with
 `--task`, and each accepts a subset of the four output formats.
 
-| Task | Slug | Condition | Formats | Cases (full) |
+| Task | Slug | Condition | Formats | Full dataset size |
 |------|------|-----------|---------|--------------|
 | **Text-to-3D**  | `text-to-3d`  | text | `minimal-json`, `openscad` | 400 |
 | **Image-to-3D** | `image-to-3d` | one rendered image | `openscad`, `cadquery`, `threejs` | 400 |
@@ -26,11 +26,11 @@ Two text conditions per case, picked with `--text-mode`:
 
 The model receives the text plus the format's system guidelines; no image.
 
-> **Demo split note.** The full split ships both text conditions per case; the
-> in-repo **demo** split currently carries only the parametric text. On the demo
-> split `--text-mode descriptive` therefore selects the descriptive *metric panel*
-> but feeds the parametric text, and J-Sem requires the 4 GT renders that only the
-> full split provides. Use the parametric mode for demo smoke tests.
+> **Demo split note.** The in-repo **demo** split currently carries only the
+> parametric text. On the demo split `--text-mode descriptive` therefore selects
+> the descriptive *metric panel* but feeds the parametric text, and J-Sem expects
+> 4 GT renders that the demo cases do not provide. Use the parametric mode for
+> demo smoke tests.
 
 ## Image-to-3D
 

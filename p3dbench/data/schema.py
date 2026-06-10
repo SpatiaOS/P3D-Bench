@@ -1,8 +1,8 @@
 """Manifest record schema.
 
 One JSONL row per case under ``data/manifests/<task>_<split>.jsonl``. Paths in
-``input``/``target`` are relative to the data root (demo: in-repo ``data/demo/``;
-full split: the HuggingFace download cache).
+``input``/``target`` are relative to the data root. This release includes the
+in-repo demo root ``data/demo/``.
 """
 
 from __future__ import annotations

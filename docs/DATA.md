@@ -33,26 +33,28 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
   Text-to-3D; Assembly-3D populates both plus `part_annotations`.
 - `target.code_path` is the GT program for Text-to-3D (`minimal-json`); it is
   `null` when the GT is a direct STEP (`format: "step"`, Image-/Assembly-3D).
-- All `input`/`target` paths are relative to the split's data root
-  (`data/demo/` in-repo; `data/full/` after download).
+- All `input`/`target` paths are relative to the split's data root. The current
+  release includes the local `data/demo/` root.
 - `metadata.difficulty` is the easy/medium/hard tier; `difficulty_raw` keeps the
   source complexity value, and `source_id` keeps the upstream case id.
 
 ## Splits
 
 - **demo** — 3 cases per task in-repo. `p3dbench validate --split demo` checks
-  manifest integrity and that every referenced file exists.
-- **full** — 400 / 400 / 203 cases on
-  [HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)
-  (`p3dbench download --split full`).
+  manifest integrity and that every referenced file exists. This is the
+  currently supported evaluation split.
+- **full** — 400 / 400 / 203 case metadata is published on
+  [HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench), but the
+  evaluator does not yet consume it because the full geometry/render/QA assets
+  are not published in the local manifest layout described above.
 
 ## Difficulty
 
 Cases span **easy → medium → hard** complexity tiers assigned during dataset
-construction by a review MLLM; the full split is complexity-balanced across
+construction by a review MLLM; the full dataset is complexity-balanced across
 semantic categories. The demo split deliberately picks low-complexity cases.
 
-## Construction (full split)
+## Construction (full dataset)
 
 - **Text-to-3D** derives from **Text2CAD v1.1**: unevaluable records are dropped,
   survivors ranked by a geometric-complexity heuristic, top candidates kept. The
@@ -65,7 +67,8 @@ semantic categories. The demo split deliberately picks low-complexity cases.
   verification MLLM. Near-duplicates are removed by DINOv2-embedding cosine
   similarity.
 - **QA banks** (Text-to-3D Judge) are generated per case and verified, then ship
-  with the data — the eval harness loads them, it does not regenerate them.
+  with evaluator-ready data; the eval harness loads them, it does not regenerate
+  them.
 
 These steps are documented for provenance; the curation/annotation tooling is
 **not** part of this release (it lived in the research repos).

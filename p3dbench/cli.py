@@ -179,7 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--metric", required=True, choices=[*METRIC_SLUGS, "all"])
     sp.set_defaults(func=cmd_run)
 
-    sp = sub.add_parser("download", help="fetch a data split (full = HuggingFace)")
+    sp = sub.add_parser("download", help="check demo data availability (full disabled)")
     sp.add_argument("--split", default="demo", choices=["demo", "full"])
     sp.set_defaults(func=cmd_download)
 

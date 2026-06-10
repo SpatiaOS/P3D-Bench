@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-MODEL="${MODEL:-gpt-4o}"
+MODEL="${MODEL:-qwen}"
 
 echo "== validate demo split =="
 p3dbench validate --split demo

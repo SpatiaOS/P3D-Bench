@@ -1,40 +1,51 @@
-# Model registry — METADATA ONLY. Secrets never go here: api_key_env names the
+# Model registry - METADATA ONLY. Secrets never go here: api_key_env names the
 # environment variable (see .env.example) that holds the actual key.
 #
-# Register a model by adding a block here + the matching key in .env. Any
-# OpenAI-compatible endpoint (OpenRouter, vLLM, LM Studio, ...) works via the
-# `openai_compatible` provider with its base_url.
+# The default examples use OpenRouter's OpenAI-compatible API, matching the
+# broader CAD benchmark configs in this workspace. You can also point
+# `openai_compatible` at vLLM, LM Studio, or another /v1/chat/completions server.
 
 models:
-  gpt-4o:
-    provider: openai            # alias for openai_compatible
-    model: gpt-4o
-    api_key_env: OPENAI_API_KEY
-    base_url: https://api.openai.com/v1
-    temperature: 0.0
-    max_tokens: 16384
+  qwen:
+    provider: openai_compatible
+    model: qwen/qwen3.6-plus
+    api_key_env: OPENROUTER_API_KEY
+    base_url: https://openrouter.ai/api/v1
+    temperature: 0.7
+    max_tokens: 65536
+    supports_vision: true
 
-  claude-opus-4-6:
-    provider: anthropic
-    model: claude-opus-4-6
-    api_key_env: ANTHROPIC_API_KEY
-    base_url: https://api.anthropic.com/v1
-    temperature: 0.0
-    max_tokens: 16384
+  claude:
+    provider: openai_compatible
+    model: anthropic/claude-opus-4.6
+    api_key_env: OPENROUTER_API_KEY
+    base_url: https://openrouter.ai/api/v1
+    temperature: 0.7
+    max_tokens: 128000
 
-  gemini-3.1-pro:
-    provider: gemini
-    model: gemini-3.1-pro-preview
-    api_key_env: GEMINI_API_KEY
-    base_url: https://generativelanguage.googleapis.com/v1beta
-    temperature: 0.0
-    max_tokens: 16384
+  gemini:
+    provider: openai_compatible
+    model: google/gemini-3.1-pro-preview
+    api_key_env: OPENROUTER_API_KEY
+    base_url: https://openrouter.ai/api/v1
+    temperature: 0.7
+    max_tokens: 65536
+    supports_vision: true
 
-  # Example: any OpenAI-compatible router (OpenRouter, vLLM, LM Studio, ...).
-  my-local-model:
+  gpt:
+    provider: openai_compatible
+    model: openai/gpt-5.4
+    api_key_env: OPENROUTER_API_KEY
+    base_url: https://openrouter.ai/api/v1
+    temperature: 0.7
+    max_tokens: 128000
+
+  # Example local endpoint. Keep the key name if your server ignores auth, or
+  # set OPENROUTER_API_KEY to a dummy value locally.
+  local-qwen:
     provider: openai_compatible
     model: qwen2.5-vl-instruct
     api_key_env: OPENROUTER_API_KEY
-    base_url: https://your-router.example.com/v1
+    base_url: http://localhost:8000/v1
     temperature: 0.0
     max_tokens: 16384

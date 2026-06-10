@@ -74,8 +74,8 @@ pip install -e .
 ```
 
 Heavy geometry/render dependencies are **optional extras**, installed only for the metric
-buckets that need them. A metric whose dependency is missing reports it clearly instead of
-crashing.
+buckets that need them. For the in-repo demo smoke test, the core install is enough when
+you use `--dry-run`; real geometry scoring needs the geometry extra.
 
 ```bash
 pip install -e ".[geometry]"   # OCC/OCP + trimesh → Geometry / Topology / Part metrics
@@ -85,7 +85,7 @@ pip install -e ".[all]"        # everything
 ```
 
 External runtimes (not pip extras): the **`openscad`** binary for the OpenSCAD format, and
-**Node.js** for the Three.js format.
+**Node.js** plus the vendored Three.js runtime for the Three.js format.
 
 ### 2. API keys
 
@@ -99,11 +99,8 @@ cp .env.example .env            # then fill in your keys
 
 ```bash
 # .env  (key NAMES only; values stay local)
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-GEMINI_API_KEY=
-OPENROUTER_API_KEY=             # any OpenAI-compatible router
-HF_TOKEN=                       # to download the full split
+OPENROUTER_API_KEY=             # default examples use OpenRouter
+HF_TOKEN=                       # reserved for future full-split downloads
 P3DBENCH_CACHE_DIR=.cache/p3dbench
 ```
 
@@ -113,18 +110,19 @@ Any OpenAI-compatible endpoint (OpenRouter, vLLM, LM Studio, …) works via the
 
 ```yaml
 models:
-  gpt-4o:
-    provider: openai
-    model: gpt-4o
-    api_key_env: OPENAI_API_KEY
-    base_url: https://api.openai.com/v1
-    temperature: 0.0
+  qwen:
+    provider: openai_compatible
+    model: qwen/qwen3.6-plus
+    api_key_env: OPENROUTER_API_KEY
+    base_url: https://openrouter.ai/api/v1
+    temperature: 0.7
+    max_tokens: 65536
 
-  my-local-model:
+  local-qwen:
     provider: openai_compatible
     model: qwen2.5-vl-instruct
-    api_key_env: OPENROUTER_API_KEY
-    base_url: https://your-router.example.com/v1
+    api_key_env: OPENROUTER_API_KEY   # set a dummy value if your local server ignores auth
+    base_url: http://localhost:8000/v1
 ```
 
 ---
@@ -146,17 +144,27 @@ An evaluation run is defined by three orthogonal choices — **task**, **output 
 
 The CLI validates `--format` against the chosen task's supported formats.
 
-**1. Get the demo data** (a few cases per task; full split on [HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench) — see [Dataset](#dataset)):
+**1. Check the demo data** (a few local cases per task; see [Dataset](#dataset)):
 
 ```bash
 p3dbench download --split demo
+p3dbench validate --split demo
 ```
 
-**2. Run one task × one format × one metric, end-to-end:**
+**2. Smoke-test prompt construction without API keys:**
+
+```bash
+MODEL=qwen examples/run_smoke.sh
+```
+
+The smoke script uses `--dry-run`, so it validates local demo manifests and builds prompts
+without calling a model or compiling generated CAD.
+
+**3. Run one task × one format × one metric with a configured model:**
 
 ```bash
 p3dbench run --task image-to-3d --format openscad --metric geometry \
-  --model gpt-4o --split demo
+  --model qwen --split demo --limit 1
 ```
 
 `run` chains the four stages and writes results under `results/<run-id>/`. You can also run
@@ -165,26 +173,27 @@ resume/checkpoint state — so you can re-score the *same* predictions under a d
 metric without re-running inference:
 
 ```bash
-p3dbench infer     --task text-to-3d --format cadquery --model gpt-4o   # → predictions.jsonl
+p3dbench infer     --task text-to-3d --format minimal-json --model qwen --split demo --limit 1  # → predictions.jsonl
 p3dbench compile   --pred predictions.jsonl                              # → compiled.jsonl
 p3dbench score     --compiled compiled.jsonl --metric topology           # → metrics.jsonl
 p3dbench summarize --metrics metrics.jsonl                               # → summary.json
 ```
 
 Useful flags: `--limit N` (first N cases), `--dry-run` (build prompts / validate config
-without calling a model), `--split {demo,full}`, `--text-mode {parametric,descriptive}`
+without calling a model), `--split demo`, `--text-mode {parametric,descriptive}`
 (Text-to-3D only — selects which metric panel is reported).
 
 ---
 
 ## Dataset
 
-- **Demo split** (a few cases per task) ships in [`data/demo/`](data/demo/) with manifests
-  under [`data/manifests/`](data/manifests/) — enough to smoke-test the whole pipeline.
-- **Full P3D-Dataset** — 400 Text-to-3D / 400 Image-to-3D / 203 Assembly-3D cases,
-  spanning easy → hard difficulty, on
-  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)
-  (`p3dbench download --split full`):
+- **Demo split** (3 cases per task) ships in [`data/demo/`](data/demo/) with manifests
+  under [`data/manifests/`](data/manifests/) — this is the currently supported local
+  evaluation split.
+- **Full P3D-Dataset** metadata is published on
+  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench), but this release
+  does not yet include the full geometry/render/QA assets in the manifest layout expected
+  by the evaluator. Use the local demo split for now.
 
 <div align="center">
 <img src="assets/dataset_gallery.png" width="92%" alt="P3D-Dataset gallery spanning easy to hard difficulty for Text-to-3D and Image-to-3D."/>
