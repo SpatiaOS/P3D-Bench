@@ -2,13 +2,13 @@
 
 # P3D-Bench
 
-**Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning**
+### Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning
 
 [![Project Page](https://img.shields.io/badge/🌐%20Project-Page-blue.svg)](https://lucasqaq.github.io/p3d/)
 [![arXiv](https://img.shields.io/badge/arXiv-2606.11152-b31b1b.svg?logo=arxiv)](https://arxiv.org/abs/2606.11152)
 [![Dataset](https://img.shields.io/badge/🤗%20P3D--Dataset-coming%20soon-yellow.svg)](#dataset)
 
-Yikang Yang<sup>1,†</sup> · Zhanpeng Hu<sup>1,†</sup> · Youtian Lin<sup>1</sup> · Mengqi Zhou<sup>1</sup> · Jingxi Xu<sup>2</sup> · Feihu Zhang<sup>2</sup> · Jiaheng Liu<sup>1</sup> · Yao Yao<sup>1,‡</sup>
+<a href="https://github.com/kangyiyang" target="_blank">Yikang Yang</a><sup>1,†</sup> · <a href="https://github.com/LucasQAQ" target="_blank">Zhanpeng Hu</a><sup>1,†</sup> · <a href="https://linyou.github.io" target="_blank">Youtian Lin</a><sup>1</sup> · Mengqi Zhou<sup>1</sup> · Jingxi Xu<sup>2</sup> · Feihu Zhang<sup>2</sup> · Jiaheng Liu<sup>1</sup> · <a href="https://yoyo000.github.io/" target="_blank">Yao Yao</a><sup>1,‡</sup>
 
 <sup>1</sup>Nanjing University &nbsp;&nbsp; <sup>2</sup>Envision
 
