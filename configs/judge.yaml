@@ -1,0 +1,11 @@
+# Judge + decomposition models (used by the Judge and Part metric buckets).
+# Both names must resolve to a block in models.yaml. The paper used Gemini 3.1
+# Pro as the visual/QA judge and Claude Opus 4.6 (reasoning off) for the
+# Assembly-3D decomposition step.
+
+judge_model: gemini-3.1-pro          # visual judge (J-Sem/J-Geo/J-Aes) + QA (QA-S/QA-P)
+decompose_model: claude-opus-4-6     # Assembly-3D stage-2 part decomposition
+
+n_views: 4                            # multiview renders fed to the judge (4 canonical views)
+judge_timeout_s: 240
+decompose_timeout_s: 300

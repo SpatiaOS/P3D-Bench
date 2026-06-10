@@ -1,0 +1,16 @@
+# Assembly-3D demo task config.
+task: assembly-3d
+split: demo
+manifest: data/manifests/assembly_3d_demo.jsonl
+supported_formats: [openscad, cadquery]
+alignment:
+  skip_normalize_and_scale: false
+  sampling_mode: exterior            # exterior-only sampling for fused multi-part outputs
+iou_variant: iou_voxel
+judge: [judge_semantic, judge_geometry, judge_aesthetics]
+# Part bucket needs the single-call decomposition step (configs/judge.yaml).
+part:
+  decompose: true
+  fidelity_cd_max: 5.0e-4            # decomposition fidelity gate (CD)
+  fidelity_iou_min: 0.95            # decomposition fidelity gate (IoU_V)
+  f_score_min: 0.7                  # successful-match threshold for PartMatch

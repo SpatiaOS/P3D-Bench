@@ -1,0 +1,16 @@
+# Text-to-3D demo task config.
+task: text-to-3d
+split: demo
+manifest: data/manifests/text_to_3d_demo.jsonl
+supported_formats: [minimal-json, openscad]
+# Two text conditions per case; pick with --text-mode on the CLI.
+text_modes: [parametric, descriptive]
+# Geometry alignment preserves explicit scale for the parametric setting
+# (center-only, no scale refinement). IoU variant for this task is IoU_C.
+alignment:
+  skip_normalize_and_scale: true     # parametric: keep absolute scale
+  sampling_mode: surface
+iou_variant: iou_csg
+judge:
+  parametric: [qa_semantic, qa_param]
+  descriptive: [qa_semantic, judge_semantic]

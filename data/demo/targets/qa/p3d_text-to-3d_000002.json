@@ -1,0 +1,373 @@
+{
+  "case_id": "0085/00858822",
+  "qa_bank_version": 6,
+  "generator_model": "gemini-3.1-pro-preview-thinking",
+  "verified": true,
+  "verification_corrections": 0,
+  "semantic": [
+    {
+      "qid": "semantic_1",
+      "split": "semantic",
+      "category": "shape_structure",
+      "question": "Which description best matches the overall 3D shape of the object?",
+      "options": [
+        "A perfect cylinder with a domed top",
+        "A rectangular block with a cylindrical boss on top",
+        "A solid stadium-shaped profile (elongated with semi-circular ends) extruded to a uniform thickness",
+        "An elliptical ring with a hollow center"
+      ],
+      "answer": "C",
+      "evidence": "The render and sketch show a single continuous body formed by extruding a profile made of two parallel lines connected by two semi-circles.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_2",
+      "split": "semantic",
+      "category": "features",
+      "question": "Which statement correctly describes the internal features of the object?",
+      "options": [
+        "It features a hollow interior with thin outer walls",
+        "It is a completely solid body with no holes, pockets, or internal cavities",
+        "It contains a single through-hole in the center",
+        "It has a rectangular pocket cut into its top face"
+      ],
+      "answer": "B",
+      "evidence": "The object is a simple extrusion of a closed outer loop with no internal boundaries or subtractive features.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_3",
+      "split": "semantic",
+      "category": "geometry_properties",
+      "question": "Looking at the primary cross-section (the largest flat face), what is its symmetry?",
+      "options": [
+        "It has two orthogonal axes of mirror symmetry",
+        "It has radial symmetry (rotational symmetry of infinite order)",
+        "It is completely asymmetrical",
+        "It has exactly one axis of mirror symmetry"
+      ],
+      "answer": "A",
+      "evidence": "The stadium shape has mirror symmetry along both its longitudinal (lengthwise) and transverse (widthwise) axes.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_4",
+      "split": "semantic",
+      "category": "shape_structure",
+      "question": "Counting all surfaces on the object, how many flat, planar faces are present?",
+      "options": [
+        "Zero (the entire object is continuously curved)",
+        "Exactly six (forming a complete rectangular box)",
+        "Exactly two (only the top and bottom)",
+        "Exactly four (the top, bottom, and two parallel side walls)"
+      ],
+      "answer": "D",
+      "evidence": "The object has a flat top and bottom face, plus two flat side faces corresponding to the straight line segments of the profile. The ends are curved cylindrical faces.",
+      "source_text_level": "abstract"
+    }
+  ],
+  "param": [
+    {
+      "qid": "param_1",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the distance between the centers of the two semicircular ends of the object?",
+      "options": [
+        "0.75",
+        "0.5625",
+        "0.1875",
+        "0.375"
+      ],
+      "answer": "D",
+      "evidence": "center_1_x=0.1875, center_2_x=0.5625, distance=0.5625-0.1875=0.375",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_2",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the ratio of the object's overall length to its overall width?",
+      "options": [
+        "3.0",
+        "2.5",
+        "1.5",
+        "2.0"
+      ],
+      "answer": "D",
+      "evidence": "overall_length=0.75, overall_width=0.375, ratio=0.75/0.375=2.0",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_3",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the radius of the circular through-hole in the center of the object?",
+      "options": [
+        "There is no circular through-hole; the object is completely solid",
+        "0.375",
+        "0.15",
+        "0.1875"
+      ],
+      "answer": "A",
+      "evidence": "The object is a solid stadium shape with no internal holes. This is a Type B existence trap to catch models that hallucinate a central hole.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_4",
+      "split": "param",
+      "category": "topology_count",
+      "question": "How many distinct curved (cylindrical) side faces does the final object have?",
+      "options": [
+        "4",
+        "3",
+        "1",
+        "2"
+      ],
+      "answer": "D",
+      "evidence": "The object has two semicircular ends, resulting in exactly 2 curved side faces.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_5",
+      "split": "param",
+      "category": "operations",
+      "question": "What best describes the 2D profile shape that was extruded to create this object?",
+      "options": [
+        "An ellipse",
+        "A pure circle",
+        "A stadium shape consisting of two parallel straight lines connected by two semicircular arcs",
+        "A rectangle with sharp corners"
+      ],
+      "answer": "C",
+      "evidence": "The sketch consists of two straight lines and two arcs, forming a stadium (pill) shape, which is then extruded.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_6",
+      "split": "param",
+      "category": "dimensions",
+      "question": "What is the overall extruded height (thickness) of the object?",
+      "options": [
+        "0.15",
+        "0.25",
+        "0.10",
+        "0.375"
+      ],
+      "answer": "A",
+      "evidence": "The extrusion depth (height) of the object is 0.15.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_7",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the radius of the semicircular curved ends of the object?",
+      "options": [
+        "0.75",
+        "0.375",
+        "0.1875",
+        "The object does not have curved ends; it is a simple rectangle"
+      ],
+      "answer": "C",
+      "evidence": "arc_midpoint_x=0.75, arc_start_x=0.5625, radius=0.75-0.5625=0.1875. Option D is a Type A existence trap.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_8",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the sum of the overall length and the overall width of the object?",
+      "options": [
+        "1.50",
+        "0.75",
+        "0.375",
+        "1.125"
+      ],
+      "answer": "D",
+      "evidence": "overall_length=0.75, overall_width=0.375, sum=0.75+0.375=1.125",
+      "source_text_level": "expert"
+    }
+  ],
+  "questions": [
+    {
+      "qid": "semantic_1",
+      "split": "semantic",
+      "category": "shape_structure",
+      "question": "Which description best matches the overall 3D shape of the object?",
+      "options": [
+        "A perfect cylinder with a domed top",
+        "A rectangular block with a cylindrical boss on top",
+        "A solid stadium-shaped profile (elongated with semi-circular ends) extruded to a uniform thickness",
+        "An elliptical ring with a hollow center"
+      ],
+      "answer": "C",
+      "evidence": "The render and sketch show a single continuous body formed by extruding a profile made of two parallel lines connected by two semi-circles.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_2",
+      "split": "semantic",
+      "category": "features",
+      "question": "Which statement correctly describes the internal features of the object?",
+      "options": [
+        "It features a hollow interior with thin outer walls",
+        "It is a completely solid body with no holes, pockets, or internal cavities",
+        "It contains a single through-hole in the center",
+        "It has a rectangular pocket cut into its top face"
+      ],
+      "answer": "B",
+      "evidence": "The object is a simple extrusion of a closed outer loop with no internal boundaries or subtractive features.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_3",
+      "split": "semantic",
+      "category": "geometry_properties",
+      "question": "Looking at the primary cross-section (the largest flat face), what is its symmetry?",
+      "options": [
+        "It has two orthogonal axes of mirror symmetry",
+        "It has radial symmetry (rotational symmetry of infinite order)",
+        "It is completely asymmetrical",
+        "It has exactly one axis of mirror symmetry"
+      ],
+      "answer": "A",
+      "evidence": "The stadium shape has mirror symmetry along both its longitudinal (lengthwise) and transverse (widthwise) axes.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_4",
+      "split": "semantic",
+      "category": "shape_structure",
+      "question": "Counting all surfaces on the object, how many flat, planar faces are present?",
+      "options": [
+        "Zero (the entire object is continuously curved)",
+        "Exactly six (forming a complete rectangular box)",
+        "Exactly two (only the top and bottom)",
+        "Exactly four (the top, bottom, and two parallel side walls)"
+      ],
+      "answer": "D",
+      "evidence": "The object has a flat top and bottom face, plus two flat side faces corresponding to the straight line segments of the profile. The ends are curved cylindrical faces.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "param_1",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the distance between the centers of the two semicircular ends of the object?",
+      "options": [
+        "0.75",
+        "0.5625",
+        "0.1875",
+        "0.375"
+      ],
+      "answer": "D",
+      "evidence": "center_1_x=0.1875, center_2_x=0.5625, distance=0.5625-0.1875=0.375",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_2",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the ratio of the object's overall length to its overall width?",
+      "options": [
+        "3.0",
+        "2.5",
+        "1.5",
+        "2.0"
+      ],
+      "answer": "D",
+      "evidence": "overall_length=0.75, overall_width=0.375, ratio=0.75/0.375=2.0",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_3",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the radius of the circular through-hole in the center of the object?",
+      "options": [
+        "There is no circular through-hole; the object is completely solid",
+        "0.375",
+        "0.15",
+        "0.1875"
+      ],
+      "answer": "A",
+      "evidence": "The object is a solid stadium shape with no internal holes. This is a Type B existence trap to catch models that hallucinate a central hole.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_4",
+      "split": "param",
+      "category": "topology_count",
+      "question": "How many distinct curved (cylindrical) side faces does the final object have?",
+      "options": [
+        "4",
+        "3",
+        "1",
+        "2"
+      ],
+      "answer": "D",
+      "evidence": "The object has two semicircular ends, resulting in exactly 2 curved side faces.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_5",
+      "split": "param",
+      "category": "operations",
+      "question": "What best describes the 2D profile shape that was extruded to create this object?",
+      "options": [
+        "An ellipse",
+        "A pure circle",
+        "A stadium shape consisting of two parallel straight lines connected by two semicircular arcs",
+        "A rectangle with sharp corners"
+      ],
+      "answer": "C",
+      "evidence": "The sketch consists of two straight lines and two arcs, forming a stadium (pill) shape, which is then extruded.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_6",
+      "split": "param",
+      "category": "dimensions",
+      "question": "What is the overall extruded height (thickness) of the object?",
+      "options": [
+        "0.15",
+        "0.25",
+        "0.10",
+        "0.375"
+      ],
+      "answer": "A",
+      "evidence": "The extrusion depth (height) of the object is 0.15.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_7",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the radius of the semicircular curved ends of the object?",
+      "options": [
+        "0.75",
+        "0.375",
+        "0.1875",
+        "The object does not have curved ends; it is a simple rectangle"
+      ],
+      "answer": "C",
+      "evidence": "arc_midpoint_x=0.75, arc_start_x=0.5625, radius=0.75-0.5625=0.1875. Option D is a Type A existence trap.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_8",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the sum of the overall length and the overall width of the object?",
+      "options": [
+        "1.50",
+        "0.75",
+        "0.375",
+        "1.125"
+      ],
+      "answer": "D",
+      "evidence": "overall_length=0.75, overall_width=0.375, sum=0.75+0.375=1.125",
+      "source_text_level": "expert"
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+     "final_name": "",
+     "final_shape": "",
+     "parts": {
+          "part_1": {
+               "coordinate_system": {
+                    "Euler Angles": [
+                         0.0,
+                         0.0,
+                         0.0
+                    ],
+                    "Translation Vector": [
+                         0.0,
+                         0.0,
+                         0.0
+                    ]
+               },
+               "sketch": {
+                    "face_1": {
+                         "loop_1": {
+                              "line_1": {
+                                   "Start Point": [
+                                        0.1875,
+                                        0.0
+                                   ],
+                                   "End Point": [
+                                        0.5625,
+                                        0.0
+                                   ]
+                              },
+                              "arc_1": {
+                                   "Start Point": [
+                                        0.5625,
+                                        0.0
+                                   ],
+                                   "Mid Point": [
+                                        0.75,
+                                        0.1875
+                                   ],
+                                   "End Point": [
+                                        0.5625,
+                                        0.375
+                                   ]
+                              },
+                              "line_2": {
+                                   "Start Point": [
+                                        0.5625,
+                                        0.375
+                                   ],
+                                   "End Point": [
+                                        0.1875,
+                                        0.375
+                                   ]
+                              },
+                              "arc_2": {
+                                   "Start Point": [
+                                        0.1875,
+                                        0.375
+                                   ],
+                                   "Mid Point": [
+                                        0.0,
+                                        0.1875
+                                   ],
+                                   "End Point": [
+                                        0.1875,
+                                        0.0
+                                   ]
+                              }
+                         }
+                    }
+               },
+               "extrusion": {
+                    "extrude_depth_towards_normal": 0.15,
+                    "extrude_depth_opposite_normal": 0.0,
+                    "sketch_scale": 0.75,
+                    "operation": "NewBodyFeatureOperation"
+               },
+               "description": {
+                    "name": "",
+                    "shape": "",
+                    "length": 0.7499999999999998,
+                    "width": 0.3749999999999999,
+                    "height": 0.14999999999999997
+               }
+          }
+     }
+}

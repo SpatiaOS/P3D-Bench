@@ -1,0 +1,10 @@
+# Image-to-3D demo task config.
+task: image-to-3d
+split: demo
+manifest: data/manifests/image_to_3d_demo.jsonl
+supported_formats: [openscad, cadquery, threejs]
+alignment:
+  skip_normalize_and_scale: false    # normalize to unit cube, allow bounded scale refine
+  sampling_mode: surface
+iou_variant: iou_voxel
+judge: [judge_semantic, judge_geometry, judge_aesthetics]

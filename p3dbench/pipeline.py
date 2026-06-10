@@ -156,13 +156,10 @@ def score(
             work_dir=case_dir,
             judge_client=judge_client,
             decompose_client=decompose_client,
-            shared={},
+            shared={"stage1_code": row.get("code")},
         )
         raw_metrics: dict = {}
         for bucket_name in buckets:
-            if bucket_name == "valid":
-                raw_metrics["valid"] = bool(row.get("valid"))
-                continue
             try:
                 bucket = get_metric_bucket(bucket_name)
                 raw_metrics.update(bucket.score(ctx) or {})

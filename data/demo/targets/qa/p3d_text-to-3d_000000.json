@@ -1,0 +1,373 @@
+{
+  "case_id": "0002/00022687",
+  "qa_bank_version": 6,
+  "generator_model": "gemini-3.1-pro-preview-thinking",
+  "verified": true,
+  "verification_corrections": 0,
+  "semantic": [
+    {
+      "qid": "semantic_1",
+      "split": "semantic",
+      "category": "shape_structure",
+      "question": "Which description best matches the overall shape of the object?",
+      "options": [
+        "A complete hollow tube",
+        "A solid rectangular block with a U-shaped channel cut out",
+        "A solid half-cylinder",
+        "A U-shaped or C-shaped curved shell with open ends"
+      ],
+      "answer": "D",
+      "evidence": "The render shows a semi-cylindrical, thin-walled shell forming a U or C shape.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_2",
+      "split": "semantic",
+      "category": "features",
+      "question": "Looking at the two open ends of the U-shaped structure, what type of faces terminate the walls?",
+      "options": [
+        "Flat, rectangular faces",
+        "Rounded, hemispherical domes",
+        "Tapered, conical points",
+        "Stepped, L-shaped flanges"
+      ],
+      "answer": "A",
+      "evidence": "The render shows that the ends of the U-shape are flat, rectangular faces connecting the inner and outer curved surfaces.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_3",
+      "split": "semantic",
+      "category": "geometry_properties",
+      "question": "Which statement accurately describes the cross-section of the object perpendicular to its longest straight edges?",
+      "options": [
+        "It is a solid rectangle.",
+        "It is a U-shape formed entirely by straight lines with no curves.",
+        "It is bounded by two curved arcs and two straight line segments.",
+        "It is a complete circular ring."
+      ],
+      "answer": "C",
+      "evidence": "The cross-section (sketch) consists of an inner arc, an outer arc, and two straight lines connecting them at the ends.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_4",
+      "split": "semantic",
+      "category": "shape_structure",
+      "question": "How many distinct solid bodies make up the final rendered object?",
+      "options": [
+        "One single continuous body",
+        "Two separate curved bodies",
+        "Three bodies (one curved, two flat)",
+        "Four bodies joined at the corners"
+      ],
+      "answer": "A",
+      "evidence": "The object is a single, continuous extruded body with no separate or disjoint parts.",
+      "source_text_level": "abstract"
+    }
+  ],
+  "param": [
+    {
+      "qid": "param_1",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the total combined wall thickness of the two flat ends of the U-shaped profile (i.e., the difference between the overall outer width and the inner width between the ends)?",
+      "options": [
+        "0.1184",
+        "0.0592",
+        "0.1446",
+        "0.0723"
+      ],
+      "answer": "C",
+      "evidence": "outer_width=0.6377, inner_width=0.5654-0.0723=0.4931, combined_thickness=0.6377-0.4931=0.1446",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_2",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the wall thickness at the lowest point of the U-shaped curve (measured as the difference in height between the inner and outer arc midpoints)?",
+      "options": [
+        "0.1184",
+        "0.0592",
+        "0.0723",
+        "0.1446"
+      ],
+      "answer": "B",
+      "evidence": "inner_arc_midpoint_y=0.0592, outer_arc_midpoint_y=0.0, difference=0.0592-0.0=0.0592",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_3",
+      "split": "param",
+      "category": "topology_count",
+      "question": "How many distinct planar (flat) faces does the final 3D object have?",
+      "options": [
+        "8",
+        "4",
+        "6",
+        "2"
+      ],
+      "answer": "B",
+      "evidence": "The object has 4 planar faces: the front and back faces created by the extrusion, and the two flat top end faces of the U-shape.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_4",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the difference in radius between the outer and inner circular through-holes passing through the curved side walls?",
+      "options": [
+        "The object does not have circular holes passing through its walls; it is a solid U-shaped shell.",
+        "0.1446",
+        "0.0723",
+        "0.0592"
+      ],
+      "answer": "A",
+      "evidence": "This is an existence trap. The object is a continuous U-shaped shell with no holes passing through its curved walls. A model that incorrectly generated side holes would pick a numeric answer.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_5",
+      "split": "param",
+      "category": "operations",
+      "question": "Which of the following best describes the cross-sectional profile used to extrude this object?",
+      "options": [
+        "A U-shape or C-shape with two straight, flat ends",
+        "A completely closed circular ring",
+        "Two concentric full circles",
+        "A solid rectangle with a semicircular pocket removed"
+      ],
+      "answer": "A",
+      "evidence": "The sketch consists of two arcs connected by two straight lines at their ends, forming an open U-shape profile that is then extruded.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_6",
+      "split": "param",
+      "category": "dimensions",
+      "question": "What is the overall extrusion depth (length) of the U-shaped object?",
+      "options": [
+        "0.5526",
+        "0.5724",
+        "0.6377",
+        "0.4931"
+      ],
+      "answer": "A",
+      "evidence": "The object is extruded by 0.5526 units, which defines its overall depth/length.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_7",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the ratio of the wall thickness at the flat ends to the wall thickness at the lowest curved point?",
+      "options": [
+        "1.50",
+        "0.82",
+        "1.00",
+        "1.22"
+      ],
+      "answer": "D",
+      "evidence": "flat_end_thickness=0.0723, lowest_point_thickness=0.0592, ratio=0.0723/0.0592=1.22. The wall thickness is not uniform.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_8",
+      "split": "param",
+      "category": "topology_count",
+      "question": "How many through-holes pass completely through the curved wall of the object?",
+      "options": [
+        "0",
+        "1",
+        "4",
+        "2"
+      ],
+      "answer": "A",
+      "evidence": "This is an existence trap distractor. The object is a solid shell with no through-holes. The correct count is 0.",
+      "source_text_level": "expert"
+    }
+  ],
+  "questions": [
+    {
+      "qid": "semantic_1",
+      "split": "semantic",
+      "category": "shape_structure",
+      "question": "Which description best matches the overall shape of the object?",
+      "options": [
+        "A complete hollow tube",
+        "A solid rectangular block with a U-shaped channel cut out",
+        "A solid half-cylinder",
+        "A U-shaped or C-shaped curved shell with open ends"
+      ],
+      "answer": "D",
+      "evidence": "The render shows a semi-cylindrical, thin-walled shell forming a U or C shape.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_2",
+      "split": "semantic",
+      "category": "features",
+      "question": "Looking at the two open ends of the U-shaped structure, what type of faces terminate the walls?",
+      "options": [
+        "Flat, rectangular faces",
+        "Rounded, hemispherical domes",
+        "Tapered, conical points",
+        "Stepped, L-shaped flanges"
+      ],
+      "answer": "A",
+      "evidence": "The render shows that the ends of the U-shape are flat, rectangular faces connecting the inner and outer curved surfaces.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_3",
+      "split": "semantic",
+      "category": "geometry_properties",
+      "question": "Which statement accurately describes the cross-section of the object perpendicular to its longest straight edges?",
+      "options": [
+        "It is a solid rectangle.",
+        "It is a U-shape formed entirely by straight lines with no curves.",
+        "It is bounded by two curved arcs and two straight line segments.",
+        "It is a complete circular ring."
+      ],
+      "answer": "C",
+      "evidence": "The cross-section (sketch) consists of an inner arc, an outer arc, and two straight lines connecting them at the ends.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_4",
+      "split": "semantic",
+      "category": "shape_structure",
+      "question": "How many distinct solid bodies make up the final rendered object?",
+      "options": [
+        "One single continuous body",
+        "Two separate curved bodies",
+        "Three bodies (one curved, two flat)",
+        "Four bodies joined at the corners"
+      ],
+      "answer": "A",
+      "evidence": "The object is a single, continuous extruded body with no separate or disjoint parts.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "param_1",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the total combined wall thickness of the two flat ends of the U-shaped profile (i.e., the difference between the overall outer width and the inner width between the ends)?",
+      "options": [
+        "0.1184",
+        "0.0592",
+        "0.1446",
+        "0.0723"
+      ],
+      "answer": "C",
+      "evidence": "outer_width=0.6377, inner_width=0.5654-0.0723=0.4931, combined_thickness=0.6377-0.4931=0.1446",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_2",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the wall thickness at the lowest point of the U-shaped curve (measured as the difference in height between the inner and outer arc midpoints)?",
+      "options": [
+        "0.1184",
+        "0.0592",
+        "0.0723",
+        "0.1446"
+      ],
+      "answer": "B",
+      "evidence": "inner_arc_midpoint_y=0.0592, outer_arc_midpoint_y=0.0, difference=0.0592-0.0=0.0592",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_3",
+      "split": "param",
+      "category": "topology_count",
+      "question": "How many distinct planar (flat) faces does the final 3D object have?",
+      "options": [
+        "8",
+        "4",
+        "6",
+        "2"
+      ],
+      "answer": "B",
+      "evidence": "The object has 4 planar faces: the front and back faces created by the extrusion, and the two flat top end faces of the U-shape.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_4",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the difference in radius between the outer and inner circular through-holes passing through the curved side walls?",
+      "options": [
+        "The object does not have circular holes passing through its walls; it is a solid U-shaped shell.",
+        "0.1446",
+        "0.0723",
+        "0.0592"
+      ],
+      "answer": "A",
+      "evidence": "This is an existence trap. The object is a continuous U-shaped shell with no holes passing through its curved walls. A model that incorrectly generated side holes would pick a numeric answer.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_5",
+      "split": "param",
+      "category": "operations",
+      "question": "Which of the following best describes the cross-sectional profile used to extrude this object?",
+      "options": [
+        "A U-shape or C-shape with two straight, flat ends",
+        "A completely closed circular ring",
+        "Two concentric full circles",
+        "A solid rectangle with a semicircular pocket removed"
+      ],
+      "answer": "A",
+      "evidence": "The sketch consists of two arcs connected by two straight lines at their ends, forming an open U-shape profile that is then extruded.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_6",
+      "split": "param",
+      "category": "dimensions",
+      "question": "What is the overall extrusion depth (length) of the U-shaped object?",
+      "options": [
+        "0.5526",
+        "0.5724",
+        "0.6377",
+        "0.4931"
+      ],
+      "answer": "A",
+      "evidence": "The object is extruded by 0.5526 units, which defines its overall depth/length.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_7",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the ratio of the wall thickness at the flat ends to the wall thickness at the lowest curved point?",
+      "options": [
+        "1.50",
+        "0.82",
+        "1.00",
+        "1.22"
+      ],
+      "answer": "D",
+      "evidence": "flat_end_thickness=0.0723, lowest_point_thickness=0.0592, ratio=0.0723/0.0592=1.22. The wall thickness is not uniform.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_8",
+      "split": "param",
+      "category": "topology_count",
+      "question": "How many through-holes pass completely through the curved wall of the object?",
+      "options": [
+        "0",
+        "1",
+        "4",
+        "2"
+      ],
+      "answer": "A",
+      "evidence": "This is an existence trap distractor. The object is a solid shell with no through-holes. The correct count is 0.",
+      "source_text_level": "expert"
+    }
+  ]
+}

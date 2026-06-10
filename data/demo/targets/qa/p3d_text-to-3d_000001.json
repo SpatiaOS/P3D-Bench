@@ -1,0 +1,373 @@
+{
+  "case_id": "0035/00351503",
+  "qa_bank_version": 6,
+  "generator_model": "gemini-3.1-pro-preview-thinking",
+  "verified": false,
+  "verification_corrections": 0,
+  "semantic": [
+    {
+      "qid": "semantic_1",
+      "split": "semantic",
+      "category": "shape_structure",
+      "question": "Which description best matches the overall shape of the final object?",
+      "options": [
+        "A solid, flat-faced cylinder or disc",
+        "A hollow cylindrical tube",
+        "A cone with a flat top",
+        "A rectangular prism with rounded corners"
+      ],
+      "answer": "A",
+      "evidence": "The render and JSON show a single solid cylindrical body with no internal voids.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_2",
+      "split": "semantic",
+      "category": "features",
+      "question": "Looking at the large flat circular faces of the object, which statement about surface features is correct?",
+      "options": [
+        "There is a chamfer applied to the outer edges of the faces",
+        "There is a single through-hole located at the center",
+        "There is a raised cylindrical boss on one of the faces",
+        "The faces are completely solid and unbroken, with no holes or cuts"
+      ],
+      "answer": "D",
+      "evidence": "The object is a simple extruded circle with no additional cut or join features on its faces.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_3",
+      "split": "semantic",
+      "category": "geometry_properties",
+      "question": "How does the overall diameter of the object compare to its thickness (extrusion depth)?",
+      "options": [
+        "The diameter is much smaller than the thickness, making it look like a long rod",
+        "The thickness tapers from one side to the other, so it cannot be compared directly",
+        "The diameter is roughly three times larger than the thickness, giving it a disc-like appearance",
+        "The diameter is roughly equal to the thickness, forming a square profile from the side"
+      ],
+      "answer": "C",
+      "evidence": "The JSON description shows a length/width (diameter) of ~0.75 and a height (thickness) of ~0.222, making the diameter roughly 3.3 times the thickness.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_4",
+      "split": "semantic",
+      "category": "geometry_properties",
+      "question": "What is the cross-sectional shape of the object when cut perpendicular to its central axis?",
+      "options": [
+        "A hexagon",
+        "A circular ring (annulus)",
+        "A square",
+        "A solid circle"
+      ],
+      "answer": "D",
+      "evidence": "The object is formed by extruding a single solid circular sketch, so any cross-section perpendicular to the extrusion axis is a solid circle.",
+      "source_text_level": "abstract"
+    }
+  ],
+  "param": [
+    {
+      "qid": "param_1",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the ratio of the cylinder's overall diameter to its overall height?",
+      "options": [
+        "4.500",
+        "0.296",
+        "1.688",
+        "3.375"
+      ],
+      "answer": "D",
+      "evidence": "diameter=0.75, height=0.2222, ratio=0.75/0.2222=3.375. Distractor 1.688 is radius/height.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_2",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the distance from the origin (0,0) to the center of the circular face in the sketch plane?",
+      "options": [
+        "0.265",
+        "0.530",
+        "0.375",
+        "0.750"
+      ],
+      "answer": "B",
+      "evidence": "center_x=0.375, center_y=0.375, distance=sqrt(0.375^2 + 0.375^2)=0.530. Distractor 0.375 is just one coordinate.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_3",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the approximate surface area of one of the flat circular faces of the cylinder?",
+      "options": [
+        "0.110",
+        "1.178",
+        "0.884",
+        "0.442"
+      ],
+      "answer": "D",
+      "evidence": "radius=0.375, area=pi*r^2=3.14159*0.375^2=0.442. Distractor 1.178 is the circumference (2*pi*r).",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_4",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the diagonal length of the square through-hole located at the center of the object?",
+      "options": [
+        "The object does not have a square through-hole; it is a solid cylinder.",
+        "0.530",
+        "0.250",
+        "0.375"
+      ],
+      "answer": "A",
+      "evidence": "The object is a solid cylinder with no holes. This is a Type B existence trap to catch models that hallucinated a central hole.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_5",
+      "split": "param",
+      "category": "topology_count",
+      "question": "How many distinct planar faces does the final cylindrical object have?",
+      "options": [
+        "3",
+        "1",
+        "2",
+        "This object has no planar faces; it is entirely curved."
+      ],
+      "answer": "C",
+      "evidence": "The cylinder has exactly 2 planar faces (the top and bottom circular faces). Option B is a Type A existence trap for models that failed to generate the flat faces.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_6",
+      "split": "param",
+      "category": "operations",
+      "question": "Which of the following best describes the geometric profile used to generate the 3D body?",
+      "options": [
+        "A rectangular profile",
+        "A semi-circular profile",
+        "A circular profile",
+        "A triangular profile"
+      ],
+      "answer": "C",
+      "evidence": "The object is a cylinder, which is formed by extruding a circular profile.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_7",
+      "split": "param",
+      "category": "dimensions",
+      "question": "What is the overall diameter of the cylindrical object?",
+      "options": [
+        "0.750",
+        "0.500",
+        "0.375",
+        "1.000"
+      ],
+      "answer": "A",
+      "evidence": "The radius is 0.375, so the overall diameter is 2 * 0.375 = 0.750.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_8",
+      "split": "param",
+      "category": "derived",
+      "question": "If the cylinder were placed inside a tightly fitting rectangular bounding box, what would be the volume of that bounding box?",
+      "options": [
+        "0.062",
+        "0.098",
+        "0.125",
+        "0.166"
+      ],
+      "answer": "C",
+      "evidence": "bounding_box_length=0.75, bounding_box_width=0.75, bounding_box_height=0.2222, volume=0.75*0.75*0.2222=0.125.",
+      "source_text_level": "expert"
+    }
+  ],
+  "questions": [
+    {
+      "qid": "semantic_1",
+      "split": "semantic",
+      "category": "shape_structure",
+      "question": "Which description best matches the overall shape of the final object?",
+      "options": [
+        "A solid, flat-faced cylinder or disc",
+        "A hollow cylindrical tube",
+        "A cone with a flat top",
+        "A rectangular prism with rounded corners"
+      ],
+      "answer": "A",
+      "evidence": "The render and JSON show a single solid cylindrical body with no internal voids.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_2",
+      "split": "semantic",
+      "category": "features",
+      "question": "Looking at the large flat circular faces of the object, which statement about surface features is correct?",
+      "options": [
+        "There is a chamfer applied to the outer edges of the faces",
+        "There is a single through-hole located at the center",
+        "There is a raised cylindrical boss on one of the faces",
+        "The faces are completely solid and unbroken, with no holes or cuts"
+      ],
+      "answer": "D",
+      "evidence": "The object is a simple extruded circle with no additional cut or join features on its faces.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_3",
+      "split": "semantic",
+      "category": "geometry_properties",
+      "question": "How does the overall diameter of the object compare to its thickness (extrusion depth)?",
+      "options": [
+        "The diameter is much smaller than the thickness, making it look like a long rod",
+        "The thickness tapers from one side to the other, so it cannot be compared directly",
+        "The diameter is roughly three times larger than the thickness, giving it a disc-like appearance",
+        "The diameter is roughly equal to the thickness, forming a square profile from the side"
+      ],
+      "answer": "C",
+      "evidence": "The JSON description shows a length/width (diameter) of ~0.75 and a height (thickness) of ~0.222, making the diameter roughly 3.3 times the thickness.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "semantic_4",
+      "split": "semantic",
+      "category": "geometry_properties",
+      "question": "What is the cross-sectional shape of the object when cut perpendicular to its central axis?",
+      "options": [
+        "A hexagon",
+        "A circular ring (annulus)",
+        "A square",
+        "A solid circle"
+      ],
+      "answer": "D",
+      "evidence": "The object is formed by extruding a single solid circular sketch, so any cross-section perpendicular to the extrusion axis is a solid circle.",
+      "source_text_level": "abstract"
+    },
+    {
+      "qid": "param_1",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the ratio of the cylinder's overall diameter to its overall height?",
+      "options": [
+        "4.500",
+        "0.296",
+        "1.688",
+        "3.375"
+      ],
+      "answer": "D",
+      "evidence": "diameter=0.75, height=0.2222, ratio=0.75/0.2222=3.375. Distractor 1.688 is radius/height.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_2",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the distance from the origin (0,0) to the center of the circular face in the sketch plane?",
+      "options": [
+        "0.265",
+        "0.530",
+        "0.375",
+        "0.750"
+      ],
+      "answer": "B",
+      "evidence": "center_x=0.375, center_y=0.375, distance=sqrt(0.375^2 + 0.375^2)=0.530. Distractor 0.375 is just one coordinate.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_3",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the approximate surface area of one of the flat circular faces of the cylinder?",
+      "options": [
+        "0.110",
+        "1.178",
+        "0.884",
+        "0.442"
+      ],
+      "answer": "D",
+      "evidence": "radius=0.375, area=pi*r^2=3.14159*0.375^2=0.442. Distractor 1.178 is the circumference (2*pi*r).",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_4",
+      "split": "param",
+      "category": "derived",
+      "question": "What is the diagonal length of the square through-hole located at the center of the object?",
+      "options": [
+        "The object does not have a square through-hole; it is a solid cylinder.",
+        "0.530",
+        "0.250",
+        "0.375"
+      ],
+      "answer": "A",
+      "evidence": "The object is a solid cylinder with no holes. This is a Type B existence trap to catch models that hallucinated a central hole.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_5",
+      "split": "param",
+      "category": "topology_count",
+      "question": "How many distinct planar faces does the final cylindrical object have?",
+      "options": [
+        "3",
+        "1",
+        "2",
+        "This object has no planar faces; it is entirely curved."
+      ],
+      "answer": "C",
+      "evidence": "The cylinder has exactly 2 planar faces (the top and bottom circular faces). Option B is a Type A existence trap for models that failed to generate the flat faces.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_6",
+      "split": "param",
+      "category": "operations",
+      "question": "Which of the following best describes the geometric profile used to generate the 3D body?",
+      "options": [
+        "A rectangular profile",
+        "A semi-circular profile",
+        "A circular profile",
+        "A triangular profile"
+      ],
+      "answer": "C",
+      "evidence": "The object is a cylinder, which is formed by extruding a circular profile.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_7",
+      "split": "param",
+      "category": "dimensions",
+      "question": "What is the overall diameter of the cylindrical object?",
+      "options": [
+        "0.750",
+        "0.500",
+        "0.375",
+        "1.000"
+      ],
+      "answer": "A",
+      "evidence": "The radius is 0.375, so the overall diameter is 2 * 0.375 = 0.750.",
+      "source_text_level": "expert"
+    },
+    {
+      "qid": "param_8",
+      "split": "param",
+      "category": "derived",
+      "question": "If the cylinder were placed inside a tightly fitting rectangular bounding box, what would be the volume of that bounding box?",
+      "options": [
+        "0.062",
+        "0.098",
+        "0.125",
+        "0.166"
+      ],
+      "answer": "C",
+      "evidence": "bounding_box_length=0.75, bounding_box_width=0.75, bounding_box_height=0.2222, volume=0.75*0.75*0.2222=0.125.",
+      "source_text_level": "expert"
+    }
+  ]
+}

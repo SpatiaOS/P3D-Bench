@@ -1,0 +1,47 @@
+cff-version: 1.2.0
+message: "If you use P3D-Bench, please cite our paper."
+title: "P3D-Bench: Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning"
+type: software
+authors:
+  - given-names: Yikang
+    family-names: Yang
+  - given-names: Zhanpeng
+    family-names: Hu
+  - given-names: Youtian
+    family-names: Lin
+  - given-names: Mengqi
+    family-names: Zhou
+  - given-names: Jingxi
+    family-names: Xu
+  - given-names: Feihu
+    family-names: Zhang
+  - given-names: Jiaheng
+    family-names: Liu
+  - given-names: Yao
+    family-names: Yao
+year: 2026
+url: "https://github.com/SpatiaOS/P3D-Bench"
+repository-code: "https://github.com/SpatiaOS/P3D-Bench"
+preferred-citation:
+  type: article
+  title: "P3D-Bench: Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning"
+  authors:
+    - given-names: Yikang
+      family-names: Yang
+    - given-names: Zhanpeng
+      family-names: Hu
+    - given-names: Youtian
+      family-names: Lin
+    - given-names: Mengqi
+      family-names: Zhou
+    - given-names: Jingxi
+      family-names: Xu
+    - given-names: Feihu
+      family-names: Zhang
+    - given-names: Jiaheng
+      family-names: Liu
+    - given-names: Yao
+      family-names: Yao
+  year: 2026
+  eprint: "2606.11152"
+  url: "https://arxiv.org/abs/2606.11152"
