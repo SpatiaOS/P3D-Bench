@@ -180,18 +180,24 @@ p3dbench run --task image-to-3d --format openscad --metric geometry \
 `run` chains the four stages and writes results under `results/<run-id>/`. You can also run
 each stage on its own — every stage reads/writes a plain JSONL artifact, with no
 resume/checkpoint state — so you can re-score the *same* predictions under a different
-metric without re-running inference:
+metric without re-running inference. Each stage defaults its output next to its input, so
+pinning `--out` on `infer` lets the rest chain by bare filename:
 
 ```bash
-p3dbench infer     --task text-to-3d --format minimal-json --model qwen --split demo --limit 1  # → predictions.jsonl
+p3dbench infer     --task text-to-3d --format minimal-json --model qwen --split demo --limit 1 --out predictions.jsonl
 p3dbench compile   --pred predictions.jsonl                              # → compiled.jsonl
 p3dbench score     --compiled compiled.jsonl --metric topology           # → metrics.jsonl
 p3dbench summarize --metrics metrics.jsonl                               # → summary.json
 ```
 
+(Without `--out`, `infer` writes to `results/<run-id>/predictions.jsonl`; point `--pred` at
+that path instead.)
+
 Useful flags: `--limit N` (first N cases), `--dry-run` (build prompts / validate config
 without calling a model), `--split demo`, `--text-mode {parametric,descriptive}`
-(Text-to-3D only — selects which metric panel is reported).
+(Text-to-3D only — picks the input spec, parametric vs descriptive, and the metric panel
+reported; descriptive falls back to the parametric text when no descriptive annotation
+ships with the case, e.g. the demo split).
 
 ---
 
