@@ -1,8 +1,8 @@
 """Load cases from manifests and resolve their data paths.
 
 - ``demo`` split: manifests + data ship in-repo (``data/manifests/``, ``data/demo/``).
-- ``full`` split: not enabled in this release; HuggingFace currently carries
-  metadata, not evaluator-ready manifests/assets.
+- ``full`` split: materialized locally by ``p3dbench download --split full`` into
+  ``data/full/`` + ``data/manifests/*_full.jsonl`` (see ``data.full_builder``).
 """
 
 from __future__ import annotations
@@ -88,9 +88,9 @@ def load_cases(
     if not path.exists():
         if split == "full":
             raise FileNotFoundError(
-                f"Full-split manifest {path} not found. Full-split evaluation is "
-                "not enabled in this release; use `--split demo` for the local "
-                "demo cases."
+                f"Full-split manifest {path} not found. Materialize it first with "
+                "`p3dbench download --split full --source-root <path>` (see docs/DATA.md), "
+                "or use `--split demo` for the in-repo demo cases."
             )
         raise FileNotFoundError(f"Manifest not found: {path}")
     root = data_root(split)

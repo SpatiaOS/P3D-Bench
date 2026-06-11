@@ -40,13 +40,51 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
 
 ## Splits
 
-- **demo** — 3 cases per task in-repo. `p3dbench validate --split demo` checks
-  manifest integrity and that every referenced file exists. This is the
-  currently supported evaluation split.
-- **full** — 400 / 400 / 203 case metadata is published on
-  [HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench), but the
-  evaluator does not yet consume it because the full geometry/render/QA assets
-  are not published in the local manifest layout described above.
+- **demo** — 3 cases per task in-repo (`data/demo/` + `data/manifests/*_demo.jsonl`).
+  `p3dbench validate --split demo` checks manifest integrity and that every
+  referenced file exists. Use it for a zero-setup smoke test.
+- **full** — Text-to-3D 400 / Image-to-3D 400 / Assembly-3D 203 cases.
+  [HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench) publishes the
+  *redistributable* part — the final benchmark **UID lists** and the P3D-derived
+  **text / assembly annotations** (`text_param`, `text_desc`, `summary`;
+  per-part + assembly-level captions). It does **not** redistribute upstream raw
+  geometry. `p3dbench download --split full` downloads those UID lists +
+  annotations and **materializes** an evaluator-ready `data/full/` tree +
+  `data/manifests/*_full.jsonl` (identical layout to the demo) from a local
+  `--source-root` holding the upstream working trees:
+
+  ```bash
+  # one-click: download UID lists + annotations, then materialize from local upstream
+  p3dbench download --split full --source-root /path/to/cad_dataset
+  p3dbench validate --split full
+  # subset / quick check:  --tasks image-to-3d --limit 20
+  ```
+
+  Expected `--source-root` layout (obtain the upstream assets under their
+  licenses — see below):
+
+  ```
+  <source-root>/fusion360/assembly/assembly/<uid>/assembly.step          # Image-/Assembly-3D GT STEP
+  <source-root>/fusion360/assembly/_shared_cache/<uid>/                  # GT STL, renders, gt_parts, manifest.json
+  <source-root>/text2cad/minimal_json/<bucket>/<id>/minimal_json/<id>.json   # Text-to-3D GT program
+  ```
+
+  Image- and Assembly-3D copy GT STEP/STL/renders/parts straight from
+  `_shared_cache`; Text-to-3D copies the GT minimal-JSON and **generates** the GT
+  STEP + STL from it via the same interpreter used to compile predictions
+  (Text2CAD STEP/STL are not cached for most cases). The build is idempotent and
+  reports any UID whose upstream assets are missing. Text-to-3D GT renders / QA
+  banks are materialized only where present locally; Geometry/Topology score for
+  all cases, while the Text-to-3D Judge bucket is limited to cases with a QA bank.
+
+  **Footprint.** A complete materialization is large — the full set is ≈31 GB,
+  dominated by upstream GT meshes (a few dozen Fusion 360 `gt_model.stl` files are
+  heavily over-tessellated, up to ~1.4 GB / ~30 M triangles each; the median GT
+  mesh is ~1.5 MB). They load and score correctly (the geometry metric samples the
+  surface) but cost time and RAM. To keep it light use `--limit N` / `--tasks ...`
+  for a subset, and `--max-edge 768` to downscale GT renders. A typical build
+  reports a handful of skips (UIDs whose upstream assets are missing, or GT
+  minimal-JSON that does not build valid geometry); these are listed, not fatal.
 
 ## Difficulty
 

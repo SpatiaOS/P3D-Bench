@@ -20,7 +20,8 @@ RESULTS_DIR = Path("results")
 
 
 def _run_id(args) -> str:
-    parts = [getattr(args, k, None) for k in ("task", "format", "model", "metric")]
+    # include split so demo/full runs of the same (task,format,model,metric) don't collide
+    parts = [getattr(args, k, None) for k in ("task", "format", "model", "split", "metric")]
     return "_".join(str(p).replace("-", "") for p in parts if p)
 
 
@@ -103,7 +104,14 @@ def cmd_run(args) -> int:
 def cmd_download(args) -> int:
     from .scripts.download_data import download
 
-    download(args.split)
+    download(
+        args.split,
+        source_root=args.source_root,
+        tasks=tuple(args.tasks) if args.tasks else None,
+        limit=args.limit,
+        max_edge=args.max_edge,
+        overwrite=args.overwrite,
+    )
     return 0
 
 
@@ -179,8 +187,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--metric", required=True, choices=[*METRIC_SLUGS, "all"])
     sp.set_defaults(func=cmd_run)
 
-    sp = sub.add_parser("download", help="check demo data availability (full disabled)")
+    sp = sub.add_parser("download", help="demo: check availability; full: download UIDs + materialize from --source-root")
     sp.add_argument("--split", default="demo", choices=["demo", "full"])
+    sp.add_argument("--source-root", help="local Fusion360 + Text2CAD working tree (full split)")
+    sp.add_argument("--tasks", nargs="*", choices=list(TASK_SLUGS),
+                    help="subset of tasks to materialize (default: all)")
+    sp.add_argument("--limit", type=int, default=None, help="first N cases per task (full split)")
+    sp.add_argument("--max-edge", type=int, default=0,
+                    help="downscale GT render longest edge to N px (0 = keep full resolution)")
+    sp.add_argument("--overwrite", action="store_true", help="re-materialize cases that already exist")
     sp.set_defaults(func=cmd_download)
 
     sp = sub.add_parser("validate", help="manifest integrity + referenced-file check")

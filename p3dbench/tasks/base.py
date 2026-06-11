@@ -24,7 +24,9 @@ class Task(ABC):
     condition_inputs: str   # "text" | "image" | "image+text"
 
     @abstractmethod
-    def build_prompt(self, fmt: Format, case: Case, image_paths: list[str]) -> PromptBundle:
+    def build_prompt(
+        self, fmt: Format, case: Case, image_paths: list[str], *, text_mode: str = "parametric"
+    ) -> PromptBundle:
         ...
 
     def check_format(self, fmt: Format) -> None:

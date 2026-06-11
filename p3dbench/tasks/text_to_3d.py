@@ -24,9 +24,16 @@ class TextTo3DTask(Task):
     supported_formats = ("minimal-json", "openscad")
     condition_inputs = "text"
 
-    def build_prompt(self, fmt: Format, case: Case, image_paths: list[str]) -> PromptBundle:
+    def build_prompt(
+        self, fmt: Format, case: Case, image_paths: list[str], *, text_mode: str = "parametric"
+    ) -> PromptBundle:
         self.check_format(fmt)
-        user = PROMPT_TEMPLATE.format(display_name=fmt.display_name, text=case.input.text)
+        # parametric (default) uses the precise expert text in input.text; descriptive
+        # uses the natural-language annotation when the manifest carries one.
+        text = case.input.text
+        if text_mode == "descriptive":
+            text = (case.metadata.get("text_desc") or "").strip() or text
+        user = PROMPT_TEMPLATE.format(display_name=fmt.display_name, text=text)
         return PromptBundle(system=fmt.system_guidelines, user=user, images=[])
 
 

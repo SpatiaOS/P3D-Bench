@@ -11,7 +11,7 @@ was produced. Each format is one module under [`p3dbench/formats/`](../p3dbench/
 | `minimal-json` | JSON | `.json` | CadQuery interpreter (`compile/text2cad_interpreter.py`) | yes | `[geometry]` extra |
 | `openscad` | OpenSCAD | `.scad` | `openscad` CLI → STL | no | `openscad` binary |
 | `cadquery` | CadQuery | `.py` | sandboxed `cadquery` subprocess → STEP → STL | yes | `[cadquery]` extra |
-| `threejs` | Three.js | `.js` | Node.js + vendored three.js → STL | no | Node.js + vendored runtime |
+| `threejs` | Three.js | `.js` | Node.js + vendored three.js → STL | no | `node` (runtime ships in-repo) |
 
 ## Code extraction
 
@@ -54,9 +54,10 @@ Run under a headless Node.js runtime that provides the same `scene/camera/
 renderer/controls` globals the browser viewer would; the scene is exported to STL
 via `STLExporter`. Per-part decomposition groups meshes under named `THREE.Group`s.
 
-**Vendored runtime:** the compiler expects, under `p3dbench/compile/three/`, the two
-files `build/three.module.js` and `examples/jsm/exporters/STLExporter.js` (i.e. a
-standard Three.js distribution dropped into that directory). They are **not**
-committed (size); without them (or without `node` on PATH) the Three.js compiler
+**Vendored runtime:** the Three.js runtime ships in-repo under `p3dbench/compile/three/`
+(a minimal Three.js distribution: `build/three.module.js` + `build/three.core.js`,
+`examples/jsm/exporters/STLExporter.js`, and `package.json` whose `exports`/`name`
+let `STLExporter.js` self-resolve its `import ... from 'three'`). No `npm install`
+is needed; only `node` must be on PATH. If `node` is absent the Three.js compiler
 returns `valid=False` with a clear message. See the module docstring in
 `p3dbench/compile/exporter.py` for the exact layout.

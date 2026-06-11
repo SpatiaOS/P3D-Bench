@@ -85,7 +85,8 @@ pip install -e ".[all]"        # everything
 ```
 
 External runtimes (not pip extras): the **`openscad`** binary for the OpenSCAD format, and
-**Node.js** plus the vendored Three.js runtime for the Three.js format.
+**Node.js** for the Three.js format (the Three.js runtime itself ships vendored under
+`p3dbench/compile/three/`, so no `npm install` is needed).
 
 ### 2. API keys
 
@@ -151,6 +152,15 @@ p3dbench download --split demo
 p3dbench validate --split demo
 ```
 
+For the full 400 / 400 / 203 split, `download --split full` pulls the UID lists +
+annotations from HuggingFace and materializes an evaluator-ready `data/full/` tree
+from a local copy of the upstream geometry (see [Dataset](#dataset)):
+
+```bash
+p3dbench download --split full --source-root /path/to/cad_dataset   # add --limit N to try a subset
+p3dbench validate --split full
+```
+
 **2. Smoke-test prompt construction without API keys:**
 
 ```bash
@@ -188,12 +198,16 @@ without calling a model), `--split demo`, `--text-mode {parametric,descriptive}`
 ## Dataset
 
 - **Demo split** (3 cases per task) ships in [`data/demo/`](data/demo/) with manifests
-  under [`data/manifests/`](data/manifests/) — this is the currently supported local
-  evaluation split.
-- **Full P3D-Dataset** metadata is published on
-  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench), but this release
-  does not yet include the full geometry/render/QA assets in the manifest layout expected
-  by the evaluator. Use the local demo split for now.
+  under [`data/manifests/`](data/manifests/) — a zero-setup smoke test.
+- **Full split** (Text-to-3D 400 / Image-to-3D 400 / Assembly-3D 203).
+  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench) publishes the
+  redistributable part — the benchmark **UID lists** and the P3D-derived **text /
+  assembly annotations** — but not the upstream raw geometry.
+  `p3dbench download --split full --source-root <path>` downloads those and
+  **materializes** `data/full/` + `data/manifests/*_full.jsonl` from a local copy of the
+  upstream working trees (Fusion 360 Gallery + Text2CAD), then `--split full` works
+  across the CLI. See [docs/DATA.md](docs/DATA.md) for the expected `--source-root`
+  layout and licensing.
 
 <div align="center">
 <img src="assets/dataset_gallery.png" width="92%" alt="P3D-Dataset gallery spanning easy to hard difficulty for Text-to-3D and Image-to-3D."/>

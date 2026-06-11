@@ -57,7 +57,9 @@ def infer(
 
     rows = []
     for rc in cases:
-        bundle = task_obj.build_prompt(fmt_obj, rc.case, [str(p) for p in rc.image_paths])
+        bundle = task_obj.build_prompt(
+            fmt_obj, rc.case, [str(p) for p in rc.image_paths], text_mode=text_mode
+        )
         row = {
             "id": rc.id,
             "task": task,

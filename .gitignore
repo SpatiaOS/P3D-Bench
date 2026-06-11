@@ -1,11 +1,11 @@
-# Python
+# Python (anchored to repo root so the vendored p3dbench/compile/three/build/ is kept)
 __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
 venv/
-build/
-dist/
+/build/
+/dist/
 
 # Env / secrets
 .env
@@ -15,6 +15,10 @@ P3DBENCH_CACHE_DIR/
 # Results / outputs
 results/
 *.jsonl.tmp
+
+# Full split: materialized locally from upstream geometry (not redistributed here)
+data/full/
+data/manifests/*_full.jsonl
 
 # OS / editor
 .DS_Store

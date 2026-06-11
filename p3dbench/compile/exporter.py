@@ -778,6 +778,12 @@ def _threejs_to_stl(
     clones it into a fresh scene, and exports ``parts_dir/part_NN.stl``.
     Returns ``(error|None, per_part_manifest|None)``.
     """
+    # node runs with cwd=pkg_root.parent (so the vendored `three` package self-
+    # resolves), so every path handed to node must be absolute — a relative
+    # work dir would otherwise resolve against the package dir, not the cwd.
+    stl_path = Path(stl_path).resolve()
+    if parts_dir is not None:
+        parts_dir = Path(parts_dir).resolve()
     code_file = stl_path.parent / "_tmp_threejs_code.mjs"
     wrapper_file = stl_path.parent / "_tmp_threejs_export.mjs"
     parts_report_file = stl_path.parent / "_tmp_threejs_parts_report.json"

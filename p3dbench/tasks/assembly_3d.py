@@ -250,7 +250,9 @@ class Assembly3DTask(Task):
     supported_formats = ("openscad", "cadquery")
     condition_inputs = "image+text"
 
-    def build_prompt(self, fmt: Format, case: Case, image_paths: list[str]) -> PromptBundle:
+    def build_prompt(
+        self, fmt: Format, case: Case, image_paths: list[str], *, text_mode: str = "parametric"
+    ) -> PromptBundle:
         self.check_format(fmt)
         if not image_paths:
             raise ValueError(f"Assembly-3D case {case.id} has no input image")

@@ -23,7 +23,9 @@ class ImageTo3DTask(Task):
     supported_formats = ("openscad", "cadquery", "threejs")
     condition_inputs = "image"
 
-    def build_prompt(self, fmt: Format, case: Case, image_paths: list[str]) -> PromptBundle:
+    def build_prompt(
+        self, fmt: Format, case: Case, image_paths: list[str], *, text_mode: str = "parametric"
+    ) -> PromptBundle:
         self.check_format(fmt)
         if not image_paths:
             raise ValueError(f"Image-to-3D case {case.id} has no input image")
