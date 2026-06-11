@@ -306,9 +306,21 @@ def _gen_step_stl_from_minimal_json(code: str, step_dst: Path, mesh_dst: Path) -
     return True
 
 
-def _write_manifest(task: str, rows: list[dict]) -> Path:
+def _write_manifest(task: str, rows: list[dict], *, merge: bool = False) -> Path:
     MANIFEST_DIR.mkdir(parents=True, exist_ok=True)
     path = MANIFEST_DIR / f"{_MANIFEST_TOKEN[task]}_full.jsonl"
+    if merge and path.exists():
+        # Partial (``--limit``) build: keep rows for cases this run did not
+        # (re)build so a quick subset run never shrinks an existing full
+        # manifest. New rows replace same-id rows; the rest are preserved.
+        by_id: dict[str, dict] = {}
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                r = json.loads(line)
+                by_id[r["id"]] = r
+        for r in rows:
+            by_id[r["id"]] = r
+        rows = [by_id[k] for k in sorted(by_id)]
     with open(path, "w", encoding="utf-8") as fh:
         for r in rows:
             fh.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -341,10 +353,14 @@ def build_full(
         rows, skipped = _BUILDERS[task](
             uids, source_root, anns, max_edge=max_edge, overwrite=overwrite, limit=limit
         )
-        path = _write_manifest(task, rows)
+        # A limited run builds only a prefix of the UID list; merge so it never
+        # truncates an already-materialized full manifest. A full run (no limit)
+        # rebuilds every UID, so it overwrites and prunes stale rows.
+        path = _write_manifest(task, rows, merge=limit is not None)
         report["tasks"][task] = {"requested": len(uids), "built": len(rows),
                                  "skipped": len(skipped), "skipped_detail": skipped[:10],
                                  "manifest": str(path)}
-        logger.info("full/%s: built %d/%d (skipped %d) -> %s",
-                    task, len(rows), len(uids), len(skipped), path)
+        logger.info("full/%s: built %d/%d (skipped %d)%s -> %s",
+                    task, len(rows), len(uids), len(skipped),
+                    " [merged into existing manifest]" if limit is not None else "", path)
     return report
