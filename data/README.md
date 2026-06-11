@@ -5,10 +5,17 @@ Current data support:
 - **`demo`** — 3 cases per task, shipped in-repo under [`demo/`](demo/) with
   manifests in [`manifests/`](manifests/). Enough to smoke-test the whole
   pipeline (`p3dbench validate --split demo`).
-- **`full`** — metadata for the complete **P3D-Dataset** is hosted on
-  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench), but the full
-  geometry/render/QA assets are not currently published in the manifest layout consumed by
-  this evaluator. Full-split evaluation is therefore not enabled in this release.
+- **`full`** — the complete **P3D-Dataset** (Text-to-3D 400 / Image-to-3D 400 /
+  Assembly-3D 203). [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)
+  publishes the *redistributable* metadata — the UID lists and P3D text/assembly
+  annotations — but not the upstream raw geometry. `p3dbench download --split full
+  --source-root <path>` pulls that metadata and **materializes** an evaluator-ready
+  `full/` tree + `manifests/*_full.jsonl` from a local copy of the upstream working
+  trees, after which `--split full` works across the CLI. See
+  [`docs/DATA.md`](../docs/DATA.md) for the expected `--source-root` layout.
+  Cases whose upstream assets are missing in the local copy (or whose GT program
+  fails to compile) are skipped — reported, not fatal — so a materialized split can
+  be slightly below the canonical 400/400/203 depending on source-root completeness.
 
 ## Layout (per split, rooted at `data/<split>/`)
 
