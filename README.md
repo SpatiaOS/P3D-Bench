@@ -152,14 +152,28 @@ p3dbench download --split demo
 p3dbench validate --split demo
 ```
 
-For the full 400 / 400 / 203 split, `download --split full` pulls the UID lists +
-annotations from HuggingFace and materializes an evaluator-ready `data/full/` tree
-from a local copy of the upstream geometry (see [Dataset](#dataset)):
+For the full 400 / 400 / 203 split the flow is three explicit stages —
+**download → prepare → eval**. HuggingFace ships only the UID lists + annotations
+(no raw geometry); the upstream CAD data is obtained under its own license and the
+`prepare` stage builds the evaluator-ready `data/full/` tree from it (see
+[Dataset](#dataset) and [docs/DATA.md](docs/DATA.md)):
 
 ```bash
-p3dbench download --split full --source-root /path/to/cad_dataset   # add --limit N to try a subset
-p3dbench validate --split full
+# A) If you already have the research-prepared _shared_cache (one-click):
+p3dbench download --split full --source-root /path/to/cad_dataset   # materialize from a prebuilt cache
+
+# B) If you have only the raw upstream (Fusion 360 Gallery + Text2CAD v1.1):
+p3dbench prepare --split full --source-root /path/to/cad_dataset    # build _shared_cache from raw, then materialize
+
+p3dbench validate --split full     # add --tasks / --limit to either command to try a subset
 ```
+
+`prepare` reuses an existing `_shared_cache` when present (so path A keeps working
+unchanged) and otherwise reproduces it with the same data-processing pipeline as the
+research repo: the **input** image is an OCC single-view render and the **judge**
+images are Blender clay multiviews. It needs the `geometry` + `render` extras, a
+Blender binary on `$P3DBENCH_BLENDER`, and Xvfb + OCP (OCP ships with the `cadquery`
+extra). Text-to-3D only needs Text2CAD minimal-JSON (no Blender).
 
 **2. Smoke-test prompt construction without API keys:**
 
@@ -208,12 +222,15 @@ ships with the case, e.g. the demo split).
 - **Full split** (Text-to-3D 400 / Image-to-3D 400 / Assembly-3D 203).
   [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench) publishes the
   redistributable part — the benchmark **UID lists** and the P3D-derived **text /
-  assembly annotations** — but not the upstream raw geometry.
-  `p3dbench download --split full --source-root <path>` downloads those and
-  **materializes** `data/full/` + `data/manifests/*_full.jsonl` from a local copy of the
-  upstream working trees (Fusion 360 Gallery + Text2CAD), then `--split full` works
-  across the CLI. See [docs/DATA.md](docs/DATA.md) for the expected `--source-root`
-  layout and licensing.
+  assembly annotations** — but not the upstream raw geometry. The CLI bridges that
+  gap in three stages: **download** (UID lists + annotations from the Hub),
+  **prepare** (build the per-case `_shared_cache` from a local copy of the upstream
+  Fusion 360 Gallery + Text2CAD trees, then materialize `data/full/` +
+  `data/manifests/*_full.jsonl`), and **eval**. `p3dbench prepare --source-root <path>`
+  reproduces the cache with the research data-processing pipeline (OCC single-view
+  input + Blender clay judge multiviews); a prebuilt `_shared_cache` is auto-detected
+  and reused. See [docs/DATA.md](docs/DATA.md) for the expected `--source-root` layout,
+  the prepare stage, and licensing.
 
 <div align="center">
 <img src="assets/dataset_gallery.png" width="92%" alt="P3D-Dataset gallery spanning easy to hard difficulty for Text-to-3D and Image-to-3D."/>

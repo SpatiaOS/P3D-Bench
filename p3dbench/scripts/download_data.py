@@ -72,6 +72,81 @@ def download(
     print("\nNext: p3dbench validate --split full")
 
 
+def prepare(
+    *,
+    source_root: Optional[str] = None,
+    tasks: Optional[tuple[str, ...]] = None,
+    limit: Optional[int] = None,
+    max_edge: int = 0,
+    overwrite: bool = False,
+    token: Optional[str] = None,
+    cache_only: bool = False,
+) -> int:
+    """Stage 2 (PREPARE): build ``_shared_cache`` from raw upstream, then materialize.
+
+    Reads the Hub UID lists/annotations, builds the per-case ``_shared_cache``
+    from the local raw tree at ``--source-root`` (Fusion 360 Gallery + Text2CAD)
+    via the ported SharedDataCache pipeline, then runs the existing ``build_full``
+    materialize (unless ``cache_only``). The raw upstream must be obtained under its
+    own license and placed at ``--source-root`` (see docs/DATA.md). Returns an exit code.
+    """
+    from ..data.full_builder import (ALL_TASKS, DEFAULT_SOURCE_ROOT, build_full,
+                                     load_hf_annotations, load_hf_uids)
+    from ..data.prepare import prepare_task, render_modes_for_task
+
+    src = Path(source_root) if source_root else DEFAULT_SOURCE_ROOT
+    sel_tasks = tasks or ALL_TASKS
+
+    if not src.exists():
+        print(
+            f"\nLocal source root not found: {src}\n"
+            "PREPARE needs the upstream raw geometry (the Hub ships only UID lists +\n"
+            "annotations). Obtain Fusion 360 Gallery + Text2CAD under their licenses,\n"
+            "place them at --source-root PATH (see docs/DATA.md), and re-run."
+        )
+        return 1
+
+    # Hard-dependency preflight: image/assembly judge renders need Blender; OCC
+    # single-view needs Xvfb. No pyrender fallback (input=OCC, judge=Blender).
+    needs_blender = any(
+        any(m.startswith("multiview_") for m in render_modes_for_task(t)) for t in sel_tasks
+    )
+    if needs_blender:
+        from ..render import blender
+
+        if not blender.is_blender_available():
+            print(
+                "\nBlender is required for the judge multiview (image-/assembly-3d) but was\n"
+                "not found. Set $P3DBENCH_BLENDER to a Blender binary, or restrict to\n"
+                "--tasks text-to-3d. (Input renders also require Xvfb + OCP.)"
+            )
+            return 1
+
+    print(f"PREPARE: building _shared_cache from raw under {src}  tasks={','.join(sel_tasks)}"
+          + (f"  limit={limit}" if limit else ""))
+    for task in sel_tasks:
+        uids = load_hf_uids(task, token)
+        anns = load_hf_annotations(task, token)
+        rep = prepare_task(task, uids, src, anns, overwrite=overwrite, limit=limit)
+        print(f"  cache/{task:12s} built={rep['built']:4d} skipped={rep['skipped']:<4d} "
+              f"-> {rep['cache_root']}")
+        for uid, why in rep["skipped_detail"]:
+            print(f"      - skip {uid}: {why}")
+
+    if cache_only:
+        print("\n--cache-only: skipping data/full materialize.")
+        return 0
+
+    print("\nMaterializing data/full from the prepared cache ...")
+    report = build_full(source_root=src, tasks=tuple(sel_tasks), limit=limit,
+                        max_edge=max_edge, overwrite=overwrite, token=token)
+    for task, tr in report["tasks"].items():
+        print(f"  {task:12s} built={tr['built']:4d}/{tr['requested']:<4d} "
+              f"skipped={tr['skipped']:<4d} -> {tr['manifest']}")
+    print("\nNext: p3dbench validate --split full")
+    return 0
+
+
 if __name__ == "__main__":
     import argparse
 

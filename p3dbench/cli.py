@@ -115,6 +115,19 @@ def cmd_download(args) -> int:
     return 0
 
 
+def cmd_prepare(args) -> int:
+    from .scripts.download_data import prepare
+
+    return prepare(
+        source_root=args.source_root,
+        tasks=tuple(args.tasks) if args.tasks else None,
+        limit=args.limit,
+        max_edge=args.max_edge,
+        overwrite=args.overwrite,
+        cache_only=args.cache_only,
+    )
+
+
 def cmd_validate(args) -> int:
     from .data.validate import validate_split
 
@@ -197,6 +210,21 @@ def build_parser() -> argparse.ArgumentParser:
                     help="downscale GT render longest edge to N px (0 = keep full resolution)")
     sp.add_argument("--overwrite", action="store_true", help="re-materialize cases that already exist")
     sp.set_defaults(func=cmd_download)
+
+    sp = sub.add_parser("prepare",
+                        help="full split: build _shared_cache from raw upstream, then materialize data/full")
+    sp.add_argument("--split", default="full", choices=["full"],
+                    help="prepare is full-split only (demo ships in-repo)")
+    sp.add_argument("--source-root", help="local Fusion360 + Text2CAD raw working tree")
+    sp.add_argument("--tasks", nargs="*", choices=list(TASK_SLUGS),
+                    help="subset of tasks to prepare (default: all)")
+    sp.add_argument("--limit", type=int, default=None, help="first N cases per task")
+    sp.add_argument("--max-edge", type=int, default=0,
+                    help="downscale GT render longest edge to N px (0 = keep full resolution)")
+    sp.add_argument("--cache-only", action="store_true",
+                    help="build _shared_cache only; skip materializing data/full")
+    sp.add_argument("--overwrite", action="store_true", help="rebuild cache/materialize for existing cases")
+    sp.set_defaults(func=cmd_prepare)
 
     sp = sub.add_parser("validate", help="manifest integrity + referenced-file check")
     sp.add_argument("--split", default="demo", choices=["demo", "full"])

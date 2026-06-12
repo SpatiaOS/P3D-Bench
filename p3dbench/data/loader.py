@@ -62,6 +62,32 @@ class ResolvedCase:
         return [self._abs(p) for p in self.case.target.part_paths if p]
 
     @property
+    def gt_parts_meta(self) -> list[dict]:
+        """GT parts as metadata dicts for the part metric.
+
+        Joins ``target.part_paths`` to ``input.part_annotations`` by ``mesh_path``
+        so each entry carries ``instance_count`` / ``role_name`` / ``semantic`` /
+        ``part_id`` next to the resolved STL path. The ``instance_count`` is what
+        lets the part metric trust upstream (HF) dedup instead of re-fingerprinting
+        the GT — matching the reference pipeline. Entries without an annotation
+        carry only ``stl_path`` (the metric then fingerprint-dedupes them).
+        """
+        anno_by_path = {a.get("mesh_path"): a for a in self.case.input.part_annotations}
+        parts: list[dict] = []
+        for rel in self.case.target.part_paths:
+            if not rel:
+                continue
+            entry: dict = {"stl_path": str(self._abs(rel))}
+            a = anno_by_path.get(rel, {})
+            if a.get("instance_count") is not None:
+                entry["instance_count"] = a["instance_count"]
+            for key in ("role_name", "semantic", "part_id"):
+                if a.get(key):
+                    entry[key] = a[key]
+            parts.append(entry)
+        return parts
+
+    @property
     def qa_bank(self) -> Optional[Path]:
         return self._abs(self.case.target.qa_bank_path)
 

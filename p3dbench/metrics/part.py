@@ -1001,7 +1001,10 @@ class _PartBucket(MetricBucket):
         gt_part_paths = [p for p in ctx.case.gt_parts if p]
         if not gt_part_paths:
             return _empty("case has no GT parts")
-        gt_parts = [{"stl_path": str(p)} for p in gt_part_paths]
+        # Carry per-part instance_count/role/semantic from the manifest annotations
+        # so the metric trusts upstream (HF) dedup rather than re-fingerprinting the
+        # GT — see ResolvedCase.gt_parts_meta. Matches the reference dedup behavior.
+        gt_parts = ctx.case.gt_parts_meta
         gt_union_path = ctx.case.gt_step or ctx.case.gt_mesh
         if not gt_union_path:
             return _empty("case has no GT union mesh")

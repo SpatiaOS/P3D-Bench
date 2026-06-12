@@ -54,8 +54,10 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
   `--source-root` holding the upstream working trees:
 
   ```bash
-  # one-click: download UID lists + annotations, then materialize from local upstream
+  # A) prebuilt research _shared_cache present -> one-click materialize:
   p3dbench download --split full --source-root /path/to/cad_dataset
+  # B) only raw upstream present -> build the cache (PREPARE), then materialize:
+  p3dbench prepare  --split full --source-root /path/to/cad_dataset
   p3dbench validate --split full
   # subset / quick check:  --tasks image-to-3d --limit 20
   ```
@@ -64,8 +66,9 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
   licenses — see below):
 
   ```
-  <source-root>/fusion360/assembly/assembly/<uid>/assembly.step          # Image-/Assembly-3D GT STEP
-  <source-root>/fusion360/assembly/_shared_cache/<uid>/                  # GT STL, renders, gt_parts, manifest.json
+  <source-root>/fusion360/assembly/assembly/<uid>/assembly.step          # Image-/Assembly-3D GT STEP (union)
+  <source-root>/fusion360/assembly/assembly/<uid>/<body_id>.step         # Assembly-3D per-body STEP (gt parts)
+  <source-root>/fusion360/assembly/_shared_cache/<uid>/                  # built by PREPARE: GT STL, renders, gt_parts, manifest.json
   <source-root>/text2cad/minimal_json/<bucket>/<id>/minimal_json/<id>.json   # Text-to-3D GT program
   ```
 
@@ -76,6 +79,22 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
   reports any UID whose upstream assets are missing. Text-to-3D GT renders / QA
   banks are materialized only where present locally; Geometry/Topology score for
   all cases, while the Text-to-3D Judge bucket is limited to cases with a QA bank.
+
+  **Stage 2 — PREPARE (raw → `_shared_cache`).** When you only have the raw
+  upstream (not the research-prepared cache), `p3dbench prepare` reproduces the
+  per-case `_shared_cache/<uid>/` and then runs the same materialize step. It ports
+  the research data-processing pipeline ([`p3dbench/data/prepare.py`](../p3dbench/data/prepare.py)):
+  the **input** image is an **OCC single-view** render and the **judge** images are a
+  **Blender clay multiview** set (no pyrender) — both are hard requirements, so
+  PREPARE needs Xvfb + OCP (the `cadquery` extra) and a Blender binary on
+  `$P3DBENCH_BLENDER`. Assembly per-part geometry is the raw `<uid>/<body_id>.step`
+  files joined to the HF `part_level_annotations` by `part_id` (role / `description_short`
+  become the per-part `semantic` label). The raw upstream is obtained under its own
+  license and placed at `--source-root` (both Text2CAD v1.1 and the Fusion 360 Gallery,
+  ~160 GB; there is no auto-download). On this from-raw path `difficulty` degrades to
+  `"unknown"` (the review-MLLM
+  `_filter/decision.json` is research-only). A prebuilt `_shared_cache` is auto-detected
+  (`is_prepared`) and reused, so path A is byte-for-byte unchanged.
 
   **Footprint.** A complete materialization is large — the full set is ≈31 GB,
   dominated by upstream GT meshes (a few dozen Fusion 360 `gt_model.stl` files are

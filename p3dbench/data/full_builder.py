@@ -183,15 +183,27 @@ def build_assembly(uids, source_root, annotations, *, max_edge, overwrite, limit
             skipped.append((uid, "missing gt parts"))
             continue
 
+        a = annotations.get(uid, {})
+        # Per-part role/semantic: prefer the cache manifest (research caches carry
+        # them; PREPARE-built caches embed the HF text), fall back to the HF
+        # part_level_annotations joined by part_id. HF ships `description_short`,
+        # not `semantic`. This never overrides a present manifest value, so the
+        # prebuilt-research-cache path is unchanged.
+        hf_parts = {p.get("part_id"): p for p in (a.get("part_level_annotations") or [])}
         part_paths, anns = [], []
         for gp in gt_parts:
             stl_name = Path(gp["stl_path"]).name
             rel = f"targets/parts/{cid}/{stl_name}"
             _copy(cache / "gt_parts" / stl_name, FULL_ROOT / rel)
             part_paths.append(rel)
-            anns.append({"part_id": gp.get("part_id"), "role_name": gp.get("role_name", ""),
-                         "instance_count": gp.get("instance_count", 1),
-                         "semantic": (gp.get("semantic") or "")[:240], "mesh_path": rel})
+            hf = hf_parts.get(gp.get("part_id"), {})
+            anns.append({
+                "part_id": gp.get("part_id"),
+                "role_name": gp.get("role_name") or hf.get("role_name", ""),
+                "instance_count": gp.get("instance_count") or hf.get("instance_count", 1),
+                "semantic": (gp.get("semantic") or hf.get("description_short") or "")[:240],
+                "mesh_path": rel,
+            })
 
         renders = [f"targets/renders/{cid}/view_{v:03d}.png" for v in range(4)]
         _copy_image(cache / "renders/occ/single_view/gt_render.png",
@@ -201,8 +213,10 @@ def build_assembly(uids, source_root, annotations, *, max_edge, overwrite, limit
         for v, rel in enumerate(renders):
             _copy_image(mv[v], FULL_ROOT / rel, max_edge)
 
+        # `_filter/decision.json` is research-only (review MLLM) and absent on the
+        # from-raw PREPARE path; difficulty then degrades to "unknown" and
+        # assembly_class falls back to the HF annotation.
         decision = _read_json(cache / "_filter" / "decision.json") or {}
-        a = annotations.get(uid, {})
         meta = {"source": "fusion360-gallery", "source_id": uid, "license_group": "fusion360-gallery",
                 "assembly_class": a.get("assembly_class") or decision.get("semantic_category"),
                 "n_parts": len(part_paths), "instance_count": a.get("instance_count"),
