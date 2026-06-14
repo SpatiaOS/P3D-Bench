@@ -45,9 +45,10 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
   referenced file exists. Use it for a zero-setup smoke test.
 - **full** — Text-to-3D 400 / Image-to-3D 400 / Assembly-3D 203 cases.
   [HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench) publishes the
-  *redistributable* part — the final benchmark **UID lists** and the P3D-derived
+  *redistributable* part — the final benchmark **UID lists**, the P3D-derived
   **text / assembly annotations** (`text_param`, `text_desc`, `summary`;
-  per-part + assembly-level captions). It does **not** redistribute upstream raw
+  per-part + assembly-level captions), and the Text-to-3D **QA banks**
+  (`data/text_to_3d/qa.jsonl`). It does **not** redistribute upstream raw
   geometry. `p3dbench download --split full` downloads those UID lists +
   annotations and **materializes** an evaluator-ready `data/full/` tree +
   `data/manifests/*_full.jsonl` (identical layout to the demo) from a local
@@ -76,9 +77,13 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
   `_shared_cache`; Text-to-3D copies the GT minimal-JSON and **generates** the GT
   STEP + STL from it via the same interpreter used to compile predictions
   (Text2CAD STEP/STL are not cached for most cases). The build is idempotent and
-  reports any UID whose upstream assets are missing. Text-to-3D GT renders / QA
-  banks are materialized only where present locally; Geometry/Topology score for
-  all cases, while the Text-to-3D Judge bucket is limited to cases with a QA bank.
+  reports any UID whose upstream assets are missing. Text-to-3D **QA banks** come
+  from the Hub `qa.jsonl` (so the Judge bucket works even on the from-raw PREPARE
+  path, which has no local banks), falling back to a local prebuilt
+  `text2cad/qa_bank/<bucket>/<id>/qa_bank.json` when the Hub file is absent. The
+  Hub bank carries every text_mode×format variant; the judge selects the active
+  run's at eval time. GT renders are materialized only where present locally;
+  Geometry/Topology score for all cases.
 
   **Stage 2 — PREPARE (raw → `_shared_cache`).** When you only have the raw
   upstream (not the research-prepared cache), `p3dbench prepare` reproduces the

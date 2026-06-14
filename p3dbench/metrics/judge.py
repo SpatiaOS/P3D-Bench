@@ -9,16 +9,20 @@ Two evaluation modes, picked from ``ctx.task`` inside :class:`_JudgeBucket`:
   have exactly 4 views, the judge is skipped (all judge keys -> ``None``) rather
   than run partially — a partial set would silently mis-pair viewpoints.
 
-* **QA** (text-to-3d): a fixed 12-question MCQ bank ships with each case. A single
-  predicted render plus the predicted source artifact are handed to the answerer,
-  which answers all 12 (an "option E / none-of-the-above" is appended at answer
-  time only). Accuracy over the semantic split (4 Q) and param split (8 Q) gives
-  QA-S / QA-P.
+* **QA** (text-to-3d): a fixed MCQ bank ships with each case. The Hub bank
+  (``data/text_to_3d/qa.jsonl``) packs every text_mode×format variant; the
+  eval-time path selects the active run's variant via
+  :func:`select_bank_questions` — 12 questions (4 semantic + 8 param) in
+  parametric mode, 4 semantic-only in descriptive mode. A single predicted render
+  plus the predicted source artifact are handed to the answerer (an "option E /
+  none-of-the-above" is appended at answer time only). Accuracy over the semantic
+  and param splits gives QA-S / QA-P.
 
 The judge / answerer / scoring algorithms, prompts, rubrics, thresholds and the
 JSON parser are reproduced verbatim from the research evaluation code. All
 generation/verification of QA banks is intentionally NOT included — banks are
-pre-built and shipped alongside the data; this module is the eval-time path only.
+pre-built and shipped alongside the data (Hub ``qa.jsonl`` or a local prebuilt
+bank); this module is the eval-time path only.
 
 Heavy/optional dependencies (trimesh for the bbox summary, the render backends)
 are imported lazily so the module imports cleanly without them.
@@ -478,6 +482,44 @@ def _bank_questions(qa_bank: dict) -> List[dict]:
     return qa_bank.get("questions") or (qa_bank.get("semantic", []) + qa_bank.get("param", []))
 
 
+# HF qa.jsonl tags each question with a short format slug; the Text-to-3D run
+# formats map onto it 1:1 (the task supports only these two).
+_HF_QA_FORMAT = {"minimal-json": "json", "openscad": "openscad", "json": "json"}
+
+
+def _question_split(q: dict) -> str:
+    """Semantic vs param split — an explicit field, else the qid prefix."""
+    return q.get("split") or ("param" if str(q.get("qid", "")).startswith("param") else "semantic")
+
+
+def select_bank_questions(qa_bank: dict, text_mode: Optional[str] = None,
+                          fmt: Optional[str] = None) -> List[dict]:
+    """Flat, normalized question list for one ``(text_mode, format)`` variant.
+
+    The Hub bank (``data/text_to_3d/qa.jsonl``) packs every text_mode×format
+    variant into one ``questions`` list, each tagged with ``text_mode``/
+    ``format``; the demo/research bank ships a single variant already carrying
+    ``split``/``category``. This returns the matching subset (or the whole bank
+    when it is not variant-tagged), with ``split`` filled in from the qid where
+    absent so the scorer can separate QA-S from QA-P.
+    """
+    questions = _bank_questions(qa_bank)
+    tagged = [q for q in questions if "text_mode" in q or "format" in q]
+    if tagged:
+        # Variant-tagged (Hub) bank: keep only the active run's variant. A
+        # missing selector or no match yields [] so the caller cleanly skips
+        # rather than scoring against a mix of variants.
+        hf_fmt = _HF_QA_FORMAT.get(fmt, fmt) if fmt else None
+        questions = [q for q in tagged
+                     if q.get("text_mode") == text_mode and q.get("format") == hf_fmt]
+    out = []
+    for q in questions:
+        q = dict(q)
+        q["split"] = _question_split(q)
+        out.append(q)
+    return out
+
+
 def _format_question_block(questions: List[dict]) -> str:
     blocks = []
     for question in questions:
@@ -556,8 +598,8 @@ def answer_qa_bank(
         raise FileNotFoundError(f"Prediction render not found: {pred_render}")
 
     questions = _bank_questions(qa_bank)
-    if len(questions) != TOTAL_QA_COUNT:
-        raise ValueError(f"QA bank must contain exactly {TOTAL_QA_COUNT} questions")
+    if not questions:
+        raise ValueError("QA bank has no questions")
 
     if artifact_label is None:
         artifact_label = ARTIFACT_LABELS.get(fmt_slug.lower(), fmt_slug)
@@ -842,10 +884,18 @@ class _JudgeBucket(MetricBucket):
             return out  # clean skip — no bank or no judge client
 
         try:
-            qa_bank = json.loads(Path(qa_path).read_text(encoding="utf-8"))
+            raw_bank = json.loads(Path(qa_path).read_text(encoding="utf-8"))
         except Exception as exc:
             logger.warning("could not load QA bank %s: %s", qa_path, exc)
             return out
+
+        # The Hub bank packs every text_mode×format variant; pick the active run's
+        # subset (the demo/research single-variant bank passes through unchanged).
+        questions = select_bank_questions(raw_bank, text_mode=text_mode, fmt=ctx.fmt)
+        if not questions:
+            logger.warning("QA bank %s has no %s/%s variant", qa_path, text_mode, ctx.fmt)
+            return out
+        qa_bank = {"questions": questions}
 
         pred_stl = ctx.compiled.get("stl")
         if not pred_stl:

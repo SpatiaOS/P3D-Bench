@@ -78,6 +78,29 @@ def load_hf_annotations(task: str, token: Optional[str] = None) -> dict[str, dic
     return {r["uid"]: r for r in rows if "uid" in r}
 
 
+def load_hf_qa(token: Optional[str] = None) -> dict[str, list]:
+    """Return ``{uid: [question, ...]}`` from the Hub Text-to-3D QA banks.
+
+    ``data/text_to_3d/qa.jsonl`` packs every ``text_mode``×``format`` variant of
+    a case into one ``questions`` list (each carries ``text_mode``/``format``/
+    ``qid``/``question``/``options``/``answer``); the eval-time judge selects the
+    subset for the active run. ``{}`` when the file is absent (older Hub revision).
+    """
+    try:
+        path = _hf_download("data/text_to_3d/qa.jsonl", token)
+    except Exception as exc:
+        logger.info("no Hub QA banks (%s); falling back to source-root qa_bank/", exc)
+        return {}
+    out: dict[str, list] = {}
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get("uid") and row.get("questions"):
+            out[row["uid"]] = row["questions"]
+    return out
+
+
 # --------------------------------------------------------------------------
 # asset copy helpers
 # --------------------------------------------------------------------------
@@ -235,8 +258,9 @@ def build_assembly(uids, source_root, annotations, *, max_edge, overwrite, limit
     return rows, skipped
 
 
-def build_text(uids, source_root, annotations, *, max_edge, overwrite, limit):
+def build_text(uids, source_root, annotations, *, max_edge, overwrite, limit, qa_map=None):
     t2c = source_root / "text2cad"
+    qa_map = qa_map or {}
     rows, skipped = [], []
     for i, uid in enumerate(uids):
         if limit and len(rows) >= limit:
@@ -279,10 +303,19 @@ def build_text(uids, source_root, annotations, *, max_edge, overwrite, limit):
             _copy_image(occ, FULL_ROOT / rel, max_edge)
             _copy_image(occ, FULL_ROOT / "inputs" / cid / "view_000.png", max_edge)
             renders.append(rel)
-        qa_src = t2c / "qa_bank" / bucket / fid / "qa_bank.json"
-        if qa_src.exists():
+        # QA bank (Text-to-3D Judge): prefer the Hub qa.jsonl (all text_mode×
+        # format variants), fall back to a local prebuilt bank under the source
+        # root. The from-raw PREPARE path has no local qa_bank/, so the Hub is
+        # the only QA source there.
+        hf_q = qa_map.get(uid)
+        if hf_q:
             qa_rel = f"targets/qa/{cid}.json"
-            _copy(qa_src, FULL_ROOT / qa_rel)
+            _write_qa_bank(uid, hf_q, FULL_ROOT / qa_rel, overwrite)
+        else:
+            qa_src = t2c / "qa_bank" / bucket / fid / "qa_bank.json"
+            if qa_src.exists():
+                qa_rel = f"targets/qa/{cid}.json"
+                _copy(qa_src, FULL_ROOT / qa_rel)
 
         meta = {"source": "text2cad-v1.1", "source_id": uid, "license_group": "cc-by-nc-sa-4.0",
                 "summary": ann.get("summary"), "text_desc": (ann.get("text_desc") or "").strip() or None}
@@ -305,6 +338,25 @@ def _read_json(path: Path):
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def _write_qa_bank(uid: str, questions: list, dst: Path, overwrite: bool) -> None:
+    """Write a Hub QA bank to the evaluator layout, filling ``split`` from the qid.
+
+    The Hub questions carry ``text_mode``/``format`` (so the judge can pick the
+    active run's variant) but not ``split``; derive it from the qid prefix so the
+    scorer can separate semantic (QA-S) from param (QA-P) accuracy.
+    """
+    if _done([dst], overwrite):
+        return
+    norm = []
+    for q in questions:
+        q = dict(q)
+        q.setdefault("split", "param" if str(q.get("qid", "")).startswith("param") else "semantic")
+        norm.append(q)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text(json.dumps({"uid": uid, "questions": norm}, ensure_ascii=False, indent=2),
+                   encoding="utf-8")
 
 
 def _gen_step_stl_from_minimal_json(code: str, step_dst: Path, mesh_dst: Path) -> bool:
@@ -364,8 +416,9 @@ def build_full(
     for task in tasks:
         uids = load_hf_uids(task, token)
         anns = load_hf_annotations(task, token)
+        extra = {"qa_map": load_hf_qa(token)} if task == "text-to-3d" else {}
         rows, skipped = _BUILDERS[task](
-            uids, source_root, anns, max_edge=max_edge, overwrite=overwrite, limit=limit
+            uids, source_root, anns, max_edge=max_edge, overwrite=overwrite, limit=limit, **extra
         )
         # A limited run builds only a prefix of the UID list; merge so it never
         # truncates an already-materialized full manifest. A full run (no limit)

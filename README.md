@@ -221,9 +221,10 @@ ships with the case, e.g. the demo split).
   under [`data/manifests/`](data/manifests/) — a zero-setup smoke test.
 - **Full split** (Text-to-3D 400 / Image-to-3D 400 / Assembly-3D 203).
   [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench) publishes the
-  redistributable part — the benchmark **UID lists** and the P3D-derived **text /
-  assembly annotations** — but not the upstream raw geometry. The CLI bridges that
-  gap in three stages: **download** (UID lists + annotations from the Hub),
+  redistributable part — the benchmark **UID lists**, the P3D-derived **text /
+  assembly annotations**, and the Text-to-3D **QA banks** (the MCQ banks scored by
+  the Judge bucket) — but not the upstream raw geometry. The CLI bridges that
+  gap in three stages: **download** (UID lists + annotations + QA banks from the Hub),
   **prepare** (build the per-case `_shared_cache` from a local copy of the upstream
   Fusion 360 Gallery + Text2CAD trees, then materialize `data/full/` +
   `data/manifests/*_full.jsonl`), and **eval**. `p3dbench prepare --source-root <path>`
