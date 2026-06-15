@@ -1,7 +1,11 @@
 """Provider-agnostic model client.
 
-Single-shot by design: one prompt in, one response out. No retry loops,
-no error-feedback refinement, no relay routing.
+One logical request per ``generate`` (one prompt in, one response out). Transient
+transport failures (HTTP 429 / 5xx, timeouts, dropped connections, and HTTP-200
+provider-error bodies) are retried with exponential backoff inside the adapter —
+see :mod:`p3dbench.models._retry`. Error-feedback *refinement* (regenerating from
+a compile error) is a separate concern orchestrated by the pipeline for the
+image-/assembly-3d tasks, not by this client; Text-to-3D stays single-shot.
 """
 
 from __future__ import annotations

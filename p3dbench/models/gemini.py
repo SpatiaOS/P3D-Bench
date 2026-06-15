@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
-import requests
-
+from ._retry import post_with_retry
 from .base import ModelClient, ModelResponse
 
 
@@ -42,13 +41,12 @@ class GeminiClient(ModelClient):
         if system:
             payload["systemInstruction"] = {"parts": [{"text": system}]}
 
-        resp = requests.post(
+        resp = post_with_retry(
             self._endpoint(),
             headers={"Content-Type": "application/json", "x-goog-api-key": self.cfg.api_key},
-            json=payload,
+            json_body=payload,
             timeout=timeout,
         )
-        resp.raise_for_status()
         data = resp.json()
         candidates = data.get("candidates", [])
         text, finish = "", None

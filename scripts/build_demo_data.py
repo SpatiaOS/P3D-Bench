@@ -12,6 +12,7 @@ Run from the repo root:  python scripts/build_demo_data.py
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -21,8 +22,11 @@ REPO = Path(__file__).resolve().parents[1]
 DEMO = REPO / "data" / "demo"
 MANIFESTS = REPO / "data" / "manifests"
 
-FUSION = Path("/mnt/CFS/yangyikang/cad_dataset/fusion360/assembly")
-TEXT2CAD = Path("/mnt/CFS/yangyikang/cad_dataset/text2cad")
+# Point this at your local upstream working tree (no machine-specific path in the
+# repo): export P3DBENCH_SOURCE_ROOT=/path/to/cad_dataset before running.
+SOURCE_ROOT = Path(os.environ.get("P3DBENCH_SOURCE_ROOT", "cad_dataset"))
+FUSION = SOURCE_ROOT / "fusion360" / "assembly"
+TEXT2CAD = SOURCE_ROOT / "text2cad"
 
 RENDER_MAX_EDGE = 512  # downscale GT judge renders to keep the demo light
 

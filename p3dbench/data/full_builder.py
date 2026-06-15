@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -36,8 +37,11 @@ logger = logging.getLogger(__name__)
 HF_REPO_ID = "SpatiaOS/P3D-Bench"
 HF_URL = f"https://huggingface.co/datasets/{HF_REPO_ID}"
 
-# Default local working trees the demo was built from (see build_demo_data.py).
-DEFAULT_SOURCE_ROOT = Path("/mnt/CFS/yangyikang/cad_dataset")
+# Where the upstream raw working trees (Fusion 360 + Text2CAD) live locally. The
+# Hub never ships these (licensing), so the user provides them via ``--source-root``
+# or the ``P3DBENCH_SOURCE_ROOT`` env var; this default is just a neutral relative
+# placeholder so no machine-specific path is baked into the repo.
+DEFAULT_SOURCE_ROOT = Path(os.environ.get("P3DBENCH_SOURCE_ROOT", "cad_dataset"))
 
 REPO = Path(__file__).resolve().parents[2]
 FULL_ROOT = REPO / "data" / "full"

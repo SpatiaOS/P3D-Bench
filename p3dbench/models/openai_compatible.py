@@ -8,8 +8,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
-import requests
-
+from ._retry import openrouter_error_reason, post_with_retry
 from .base import IMAGE_MIME, ModelClient, ModelResponse
 
 
@@ -48,17 +47,19 @@ class OpenAICompatibleClient(ModelClient):
         if temperature is not None:
             payload["temperature"] = temperature
 
-        resp = requests.post(
+        resp = post_with_retry(
             self._endpoint(),
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.cfg.api_key}",
             },
-            json=payload,
+            json_body=payload,
             timeout=timeout,
+            retryable_body=openrouter_error_reason,
         )
-        resp.raise_for_status()
         data = resp.json()
+        if data.get("error") and not data.get("choices"):  # provider error survived retries
+            raise RuntimeError(f"provider error: {data['error']}")
         choice = data["choices"][0]
         message = choice.get("message", {})
         text = message.get("content") or ""

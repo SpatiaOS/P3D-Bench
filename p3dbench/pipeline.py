@@ -9,6 +9,8 @@ downstream stage never has to re-read the manifest.
 from __future__ import annotations
 
 import logging
+import tempfile
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Optional
@@ -36,6 +38,21 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------------------------
 # Stage 1: infer
 # --------------------------------------------------------------------------
+# Tasks that get the compile-check-retry error-feedback loop (cadbenchmark port).
+# Text-to-3D stays single-shot by design.
+REFINE_TASKS = ("image-to-3d", "assembly-3d")
+DEFAULT_REFINE_ATTEMPTS = 3
+
+
+def _effective_attempts(task: str, refine_attempts: Optional[int]) -> int:
+    """Max generation attempts for a task (1 = single-shot, no refine)."""
+    if task not in REFINE_TASKS:
+        return 1
+    if refine_attempts is None:
+        return DEFAULT_REFINE_ATTEMPTS
+    return max(1, refine_attempts)
+
+
 def infer(
     task: str,
     fmt: str,
@@ -47,6 +64,7 @@ def infer(
     dry_run: bool = False,
     out: Path,
     config_dir: Path = DEFAULT_CONFIG_DIR,
+    refine_attempts: Optional[int] = None,
 ) -> Path:
     task_obj = resolve_task(task)
     fmt_obj = resolve_format(fmt)
@@ -54,6 +72,7 @@ def infer(
 
     cases = load_cases(task, split, limit=limit)
     client = None if dry_run else get_client(model, config_dir)
+    max_attempts = _effective_attempts(task, refine_attempts)
 
     rows = []
     for rc in cases:
@@ -77,21 +96,192 @@ def infer(
         if dry_run:
             rows.append(row)
             continue
-        try:
-            resp = client.generate(bundle.user, images=bundle.images, system=bundle.system)
-            row["raw_text"] = resp.text
-            row["code"] = fmt_obj.extract_code(resp.text)
-            row["usage"] = resp.usage
-            if not row["code"].strip():
-                row["error"] = "empty code extraction"
-        except Exception as exc:  # single-shot: a failed call is just an error state
-            row["error"] = f"{type(exc).__name__}: {exc}"
-            logger.warning("infer failed for %s: %s", rc.id, exc)
+        if max_attempts > 1:
+            _infer_with_refine(client, fmt_obj, bundle, row, max_attempts=max_attempts)
+        else:
+            _infer_single_shot(client, fmt_obj, bundle, row)
         rows.append(row)
 
     write_jsonl(out, rows)
     logger.info("infer: wrote %d predictions -> %s", len(rows), out)
     return out
+
+
+def _infer_single_shot(client, fmt_obj, bundle, row: dict) -> None:
+    """One call, scored as-is (Text-to-3D, or refine disabled). API-level retry
+    for transient transport failures still happens inside ``client.generate``."""
+    try:
+        resp = client.generate(bundle.user, images=bundle.images, system=bundle.system)
+        row["raw_text"] = resp.text
+        row["code"] = fmt_obj.extract_code(resp.text)
+        row["usage"] = resp.usage
+        if not row["code"].strip():
+            row["error"] = "empty code extraction"
+    except Exception as exc:  # a failed call is just an error state
+        row["error"] = f"{type(exc).__name__}: {exc}"
+        logger.warning("infer failed for %s: %s", row["id"], exc)
+
+
+def _infer_with_refine(client, fmt_obj, bundle, row: dict, *, max_attempts: int) -> None:
+    """Compile-check-retry with error feedback (image-/assembly-3d).
+
+    Port of cadbenchmark ``generate_with_retry``: generate -> extract -> compile;
+    on an invalid compile, feed the error back and regenerate, up to
+    ``max_attempts``. An LLM-side failure (call raised, or empty extraction) or an
+    export-timeout-only failure stops the loop early — error feedback would be
+    useless there. The intermediate compiles run in a temp dir purely to drive the
+    loop; the authoritative artifacts are produced later by the ``compile`` stage.
+    """
+    user_prompt = bundle.user
+    history: list[dict] = []
+    total_usage: dict = {}
+    code = ""
+    last_error: Optional[str] = None
+    valid = False
+
+    with tempfile.TemporaryDirectory(prefix="p3d_refine_") as td:
+        td = Path(td)
+        for attempt in range(1, max_attempts + 1):
+            try:
+                resp = client.generate(user_prompt, images=bundle.images, system=bundle.system)
+            except Exception as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+                logger.warning("infer %s attempt %d/%d failed: %s",
+                               row["id"], attempt, max_attempts, last_error)
+                history.append({"attempt": attempt, "valid": False, "errors": [last_error],
+                                "llm_failed": True, "error_stage": "llm_generate"})
+                break  # LLM-side failure: stop (feedback can't help)
+
+            row["raw_text"] = resp.text
+            _merge_usage(total_usage, resp.usage)
+            code = fmt_obj.extract_code(resp.text)
+            if not code.strip():
+                last_error = "empty code extraction"
+                history.append({"attempt": attempt, "valid": False, "errors": [last_error],
+                                "llm_failed": True, "error_stage": "llm_extract"})
+                break  # no code to feed back
+
+            cr = fmt_obj.compile(code, td / f"attempt_{attempt}")
+            valid = bool(cr.valid)
+            errors = list(cr.errors) if cr.errors else ([] if valid else ["invalid (no error message)"])
+            primary = (cr.error_details or [{}])[0]
+            sig = _error_signature(errors, primary)
+            repeat = _count_repeats(history, sig)
+            history.append({"attempt": attempt, "valid": valid, "errors": errors[:5],
+                            "error_signature": sig, "repeat_count": repeat,
+                            "error_stage": primary.get("stage"), "llm_failed": False})
+
+            if valid:
+                last_error = None
+                logger.info("infer %s attempt %d/%d: valid", row["id"], attempt, max_attempts)
+                break
+
+            last_error = errors[0] if errors else "invalid"
+            logger.info("infer %s attempt %d/%d: invalid — %s",
+                        row["id"], attempt, max_attempts, errors[:2])
+            if _is_export_timeout_only(errors):
+                break  # timeouts: feedback is useless, code preserved as-is
+            if attempt < max_attempts:
+                user_prompt = _build_refine_prompt(
+                    bundle.user, code, errors, fmt_obj,
+                    has_images=bool(bundle.images), error_detail=primary, repeat_count=repeat,
+                )
+                time.sleep(1)
+
+    row["code"] = code
+    row["usage"] = total_usage
+    row["error"] = None if valid else last_error
+    row["attempts"] = len(history)
+    row["attempt_history"] = history
+
+
+# -- refine helpers (cadbenchmark port) ------------------------------------
+_FENCE_LANG = {"minimal-json": "json", "openscad": "scad",
+               "cadquery": "python", "threejs": "javascript"}
+
+
+def _build_refine_prompt(original_user: str, code: str, errors: list, fmt_obj, *,
+                         has_images: bool, error_detail: dict, repeat_count: int) -> str:
+    """Rebuild the user prompt with the previous code + compile error fed back."""
+    error_text = "\n".join(str(e) for e in errors) if errors else "Unknown error"
+    lang = _FENCE_LANG.get(fmt_obj.slug, "")
+
+    diag = []
+    for key, label in (("stage", "Failure stage"), ("error_type", "Error type"),
+                       ("line_number", "Failing line number"), ("line_text", "Failing line text")):
+        val = (error_detail or {}).get(key)
+        if val is not None and val != "":
+            diag.append(f"- {label}: {val}")
+    diag_block = ("Additional diagnostics:\n" + "\n".join(diag) + "\n") if diag else ""
+
+    tb = (error_detail or {}).get("traceback")
+    tb_block = f"Traceback:\n```\n{tb}\n```\n" if tb else ""
+
+    escalation = ""
+    if repeat_count >= 2:
+        escalation = (
+            f"\nIMPORTANT: This same failure has happened {repeat_count} times in a row. "
+            "Do not make a superficial edit. Replace or rewrite the failing section more "
+            "substantially, targeting the real root cause.\n"
+        )
+
+    image_hint = ""
+    if has_images:
+        image_hint = ("\nIMPORTANT: Look at the provided image(s) carefully. Your fixed code must "
+                      "still accurately match the 3D geometry shown in the image(s).\n")
+
+    return (
+        f"{original_user}\n\n"
+        "---\n"
+        f"Your previous attempt produced the following {fmt_obj.display_name} code, but it "
+        "failed to compile/export:\n\n"
+        f"```{lang}\n{code}\n```\n\n"
+        f"The error was:\n```\n{error_text}\n```\n"
+        f"{diag_block}{tb_block}{escalation}{image_hint}\n"
+        "Please fix the error and generate a corrected version of the complete code. "
+        "Output ONLY the fixed code."
+    )
+
+
+def _error_signature(errors: list, primary: dict) -> str:
+    msg = str(errors[0]).strip() if errors else "invalid_without_error"
+    stage = (primary or {}).get("stage") or "unknown_stage"
+    line = (primary or {}).get("line_number")
+    return f"{stage}|{line}|{msg}"
+
+
+def _count_repeats(history: list, sig: str) -> int:
+    """How many consecutive recent attempts ended on this same error signature."""
+    count = 1
+    for prev in reversed(history):
+        if prev.get("valid") or prev.get("error_signature") != sig:
+            break
+        count += 1
+    return count
+
+
+def _is_export_timeout_only(errors: list) -> bool:
+    """True iff every error is a wall-clock export timeout (feedback won't help)."""
+    if not errors:
+        return False
+    return all(isinstance(e, str) and "timed out" in e.lower() for e in errors)
+
+
+def _merge_usage(total: dict, addition: dict) -> None:
+    """Accumulate token-usage counters across refine attempts."""
+    if not isinstance(addition, dict):
+        return
+    for key, value in addition.items():
+        if isinstance(value, bool):
+            total.setdefault(key, value)
+        elif isinstance(value, (int, float)):
+            total[key] = total.get(key, 0) + value
+        elif isinstance(value, dict):
+            sub = total.setdefault(key, {})
+            if isinstance(sub, dict):
+                _merge_usage(sub, value)
+        else:
+            total.setdefault(key, value)
 
 
 # --------------------------------------------------------------------------

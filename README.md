@@ -208,7 +208,10 @@ p3dbench summarize --metrics metrics.jsonl                               # → s
 that path instead.)
 
 Useful flags: `--limit N` (first N cases), `--dry-run` (build prompts / validate config
-without calling a model), `--split demo`, `--text-mode {parametric,descriptive}`
+without calling a model), `--split demo`,
+`--refine-attempts N` (Image-/Assembly-3D only: compile-check-retry with error
+feedback, default 3, `1` disables; Text-to-3D is always single-shot),
+`--text-mode {parametric,descriptive}`
 (Text-to-3D only — picks the input spec, parametric vs descriptive, and the metric panel
 reported; descriptive falls back to the parametric text when no descriptive annotation
 ships with the case, e.g. the demo split).

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
-import requests
-
+from ._retry import post_with_retry
 from .base import ModelClient, ModelResponse
 
 ANTHROPIC_VERSION = "2023-06-01"
@@ -55,17 +54,16 @@ class AnthropicClient(ModelClient):
         if temperature is not None:
             payload["temperature"] = temperature
 
-        resp = requests.post(
+        resp = post_with_retry(
             self._endpoint(),
             headers={
                 "Content-Type": "application/json",
                 "x-api-key": self.cfg.api_key,
                 "anthropic-version": ANTHROPIC_VERSION,
             },
-            json=payload,
+            json_body=payload,
             timeout=timeout,
         )
-        resp.raise_for_status()
         data = resp.json()
         text = "".join(
             block.get("text", "")

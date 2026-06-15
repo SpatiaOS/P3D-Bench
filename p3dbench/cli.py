@@ -43,6 +43,7 @@ def cmd_infer(args) -> int:
         args.task, args.format, args.model,
         split=args.split, limit=args.limit, text_mode=args.text_mode,
         dry_run=args.dry_run, out=out, config_dir=Path(args.config_dir),
+        refine_attempts=args.refine_attempts,
     )
     print(f"predictions -> {out}")
     return 0
@@ -89,6 +90,7 @@ def cmd_run(args) -> int:
         args.task, args.format, args.model,
         split=args.split, limit=args.limit, text_mode=args.text_mode,
         dry_run=args.dry_run, out=paths["predictions"], config_dir=Path(args.config_dir),
+        refine_attempts=args.refine_attempts,
     )
     if args.dry_run:
         print(f"dry-run predictions -> {paths['predictions']}")
@@ -169,6 +171,9 @@ def build_parser() -> argparse.ArgumentParser:
                         choices=["parametric", "descriptive"], help="Text-to-3D only")
         sp.add_argument("--dry-run", action="store_true",
                         help="build prompts / validate config without calling a model")
+        sp.add_argument("--refine-attempts", type=int, default=None,
+                        help="image-/assembly-3d: max compile-check-retry attempts with error "
+                             "feedback (default 3; 1 disables). Text-to-3D is always single-shot.")
         sp.add_argument("--config-dir", default=str(DEFAULT_CONFIG_DIR))
 
     sp = sub.add_parser("infer", help="run a model -> predictions.jsonl")

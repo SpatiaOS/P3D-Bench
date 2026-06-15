@@ -21,7 +21,8 @@ Then `p3dbench run --model my-model ...`.
 
 ## Providers
 
-Three adapters, all single-shot (one prompt → one response; no retry/relay):
+Three adapters, one logical request per `generate` (one prompt → one response;
+no relay routing):
 
 | `provider` | Adapter | Endpoint | Auth header | Notes |
 |---|---|---|---|---|
@@ -31,6 +32,27 @@ Three adapters, all single-shot (one prompt → one response; no retry/relay):
 
 Any OpenAI-compatible router works through `openai_compatible` — just point
 `base_url` at it.
+
+### Transport retry
+
+Every adapter retries transient transport failures with exponential backoff
+(5·2ⁿ s) via [`models/_retry.py`](../p3dbench/models/_retry.py): HTTP **429 / 5xx**,
+`Timeout` / `ConnectionError` / `ChunkedEncodingError`, and HTTP-**200**
+provider-error bodies (e.g. OpenRouter `{"error": {"code": 522}}` with no
+`choices`). The budget is **2 attempts** (1 retry) by default, override with
+`P3DBENCH_API_MAX_RETRIES`. This is purely transport robustness — the *content*
+is still one model response.
+
+### Error-feedback refinement (image-/assembly-3d)
+
+For **image-to-3d** and **assembly-3d**, `infer` runs a compile-check-retry loop:
+if a generated program fails to compile, the error (plus any line/traceback
+diagnostics, and an escalation note when the same error repeats) is fed back and
+the model regenerates, up to `--refine-attempts` times (**default 3**; `1`
+disables). An LLM-side failure (call error or empty extraction) or an
+export-timeout-only failure stops the loop early. **Text-to-3D is always
+single-shot** (no refine). The loop's intermediate compiles only drive the
+feedback; the authoritative STEP/STL come from the separate `compile` stage.
 
 ## Judge & decomposition models
 

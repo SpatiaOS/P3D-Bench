@@ -37,6 +37,11 @@ The model receives the text plus the format's system guidelines; no image.
 The model receives **one** rendered image (no text) and reproduces the object.
 Scored on Geometry (IoU_V), Topology, Judge (J-Sem / J-Geo / J-Aes), Valid.
 
+> **Refinement.** Image-to-3D and Assembly-3D generation runs a compile-check-retry
+> loop (`--refine-attempts`, default 3): an invalid compile is fed back to the model
+> with the error for up to N attempts. Text-to-3D stays single-shot. See
+> [API.md](API.md#error-feedback-refinement-image-assembly-3d).
+
 ## Assembly-3D
 
 The model receives one render **and** a structured text blob (overall caption +
