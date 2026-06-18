@@ -5,6 +5,7 @@
 ### Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning
 
 [![Project Page](https://img.shields.io/badge/🌐%20Project-Page-blue.svg)](https://spatiaos.github.io/projects/P3D-Bench)
+[![Live Leaderboard](https://img.shields.io/badge/🏆%20Live-Leaderboard-orange.svg)](https://spatiaos.github.io/projects/P3D-Bench/#leaderboard)
 [![arXiv](https://img.shields.io/badge/arXiv-2606.11152-b31b1b.svg?logo=arxiv)](https://arxiv.org/abs/2606.11152)
 [![Dataset](https://img.shields.io/badge/🤗%20HuggingFace-Dataset-yellow.svg)](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)
 
