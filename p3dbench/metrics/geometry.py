@@ -348,7 +348,7 @@ def align_meshes(mesh_pred, mesh_gt, n_points: int = 4096,
         "pca" — principal-axis alignment with 4 sign-flip candidates.
 
     ``max_scale_delta`` is the maximum deviation from scale=1.0 during
-    refinement (0.0 disables scale refinement, e.g. for text2cad);
+    refinement (0.0 disables scale refinement, e.g. for text-to-3d);
     ``max_translate`` is the per-axis translation bound.
 
     Returns ``(aligned_pred, aligned_gt, best_transform_4x4)``. If scipy is
@@ -968,7 +968,7 @@ def align_and_compute(
         sampling_mode: ``'surface'`` (all triangles) or ``'exterior'`` (voxel
             flood-fill restricts CD/F/NC sampling to the outer skin).
         skip_normalize_and_scale: center-only + scale refinement disabled
-            (text2cad, where exact dimensions make absolute scale meaningful).
+            (text-to-3d, where exact dimensions make absolute scale meaningful).
         compute_iou_variant: ``'voxel'`` | ``'csg'`` | ``None``.
 
     Returns ``(metrics, align_transform_4x4, aligned_pred)`` where ``metrics``

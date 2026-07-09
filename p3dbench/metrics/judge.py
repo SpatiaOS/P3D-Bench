@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 # ==========================================================================
 # Shared JSON extraction
-# (the richer 3-strategy text2cad_qa parser; the llm_judge brace-scan is a
+# (the richer 3-strategy text-to-3d QA parser; the llm_judge brace-scan is a
 #  strict subset of strategy 3, so this single parser serves both paths.)
 # ==========================================================================
 def extract_json_object(text: str) -> Optional[dict]:
@@ -149,7 +149,7 @@ def llm_judge_score(llm_client,
             ``geometry_only=True``.
         geometry_only: When True the judge scores ONLY geometry — aesthetics +
             semantic are dropped from both the prompt and the output dict (used
-            for text2cad). Output dict in this mode: ``{geometry, reason, error}``.
+            for text-to-3d). Output dict in this mode: ``{geometry, reason, error}``.
 
     Returns:
         dict with geometry score; plus aesthetics + optional semantic + avg unless
@@ -178,7 +178,7 @@ def llm_judge_score(llm_client,
 
     # geometry_only takes precedence over enable_semantic — when True,
     # neither aesthetics nor semantic is asked for or returned. Used for
-    # text2cad where the panel is a single geometry axis.
+    # text-to-3d where the panel is a single geometry axis.
     if geometry_only:
         enable_semantic = False
 
