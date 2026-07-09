@@ -47,15 +47,20 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
   [HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench) publishes the
   *redistributable* part — the final benchmark **UID lists**, the P3D-derived
   **text / assembly annotations** (`text_param`, `text_desc`, `summary`;
-  per-part + assembly-level captions), and the Text-to-3D **QA banks**
-  (`data/text_to_3d/qa.jsonl`). It does **not** redistribute upstream raw
-  geometry. `p3dbench download --split full` downloads those UID lists +
-  annotations and **materializes** an evaluator-ready `data/full/` tree +
-  `data/manifests/*_full.jsonl` (identical layout to the demo) from a local
-  `--source-root` holding the upstream working trees:
+  per-part + assembly-level captions), the Text-to-3D **QA banks**
+  (`data/text_to_3d/qa.jsonl`), and the Text-to-3D **GT CAD programs**
+  (`data/text_to_3d/minimal_json.jsonl`, Text2CAD-derived minimal-JSON, shipped
+  because Text2CAD is CC BY-NC-SA 4.0). It does **not** redistribute the Fusion 360
+  Gallery raw geometry (Image-/Assembly-3D STEP/renders/meshes). So **Text-to-3D
+  materializes with no local upstream at all**; only Image-/Assembly-3D need a
+  local `--source-root`. `p3dbench download --split full` downloads the Hub assets
+  and **materializes** an evaluator-ready `data/full/` tree +
+  `data/manifests/*_full.jsonl` (identical layout to the demo):
 
   ```bash
-  # A) prebuilt research _shared_cache present -> one-click materialize:
+  # Text-to-3D only — nothing local needed (GT programs come from the Hub):
+  p3dbench download --split full --tasks text-to-3d
+  # A) all tasks, prebuilt research _shared_cache present -> one-click materialize:
   p3dbench download --split full --source-root /path/to/cad_dataset
   # B) only raw upstream present -> build the cache (PREPARE), then materialize:
   p3dbench prepare  --split full --source-root /path/to/cad_dataset
@@ -64,17 +69,20 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
   ```
 
   Expected `--source-root` layout (obtain the upstream assets under their
-  licenses — see below):
+  licenses — see below). Only the Fusion 360 tree is required; the Text2CAD
+  `minimal_json` line is **optional** — a local copy overrides the Hub, otherwise
+  the Text-to-3D GT program is pulled from the Hub:
 
   ```
   <source-root>/fusion360/assembly/assembly/<uid>/assembly.step          # Image-/Assembly-3D GT STEP (union)
   <source-root>/fusion360/assembly/assembly/<uid>/<body_id>.step         # Assembly-3D per-body STEP (gt parts)
   <source-root>/fusion360/assembly/_shared_cache/<uid>/                  # built by PREPARE: GT STL, renders, gt_parts, manifest.json
-  <source-root>/text2cad/minimal_json/<bucket>/<id>/minimal_json/<id>.json   # Text-to-3D GT program
+  <source-root>/text2cad/minimal_json/<bucket>/<id>/minimal_json/<id>.json   # Text-to-3D GT program (OPTIONAL — Hub fallback)
   ```
 
   Image- and Assembly-3D copy GT STEP/STL/renders/parts straight from
-  `_shared_cache`; Text-to-3D copies the GT minimal-JSON and **generates** the GT
+  `_shared_cache`; Text-to-3D takes the GT minimal-JSON (local source-root if
+  present, else the Hub-shipped program) and **generates** the GT
   STEP + STL from it via the same interpreter used to compile predictions
   (Text2CAD STEP/STL are not cached for most cases). The build is idempotent and
   reports any UID whose upstream assets are missing. Text-to-3D **QA banks** come
