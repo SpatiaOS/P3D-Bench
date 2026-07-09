@@ -1,21 +1,24 @@
 """Materialize the full P3D-Bench split from HuggingFace + a local source root.
 
-HuggingFace (``SpatiaOS/P3D-Bench``) publishes only the *redistributable*
-metadata: the final benchmark UID lists and the P3D-derived text/assembly
-annotations. It deliberately does **not** redistribute upstream raw geometry
-(Fusion 360 Gallery STEP/renders, Text2CAD minimal-JSON). This builder pulls
-the UID lists/annotations from the Hub and reads the heavy geometry assets from
-a local ``--source-root`` (the Fusion 360 + Text2CAD working trees), then writes
-an evaluator-ready ``data/full/`` tree plus ``data/manifests/*_full.jsonl`` whose
+HuggingFace (``SpatiaOS/P3D-Bench``) publishes the *redistributable* assets: the
+final benchmark UID lists, the P3D-derived text/assembly annotations, and — for
+Text-to-3D — the GT CAD **programs** (Text2CAD-derived minimal-JSON, shipped
+because Text2CAD is CC BY-NC-SA 4.0). It deliberately does **not** redistribute
+the Fusion 360 Gallery raw geometry (STEP/renders/meshes), whose license forbids
+it. This builder pulls the Hub assets and reads any local heavy geometry from a
+``--source-root`` (the Fusion 360 + Text2CAD working trees), then writes an
+evaluator-ready ``data/full/`` tree plus ``data/manifests/*_full.jsonl`` whose
 layout matches the in-repo demo split, so ``--split full`` "just works".
 
 Per task:
   * image-to-3d / assembly-3d : copy GT STEP/STL/renders/parts straight out of
-    ``fusion360/assembly/_shared_cache/<uid>/`` (mirrors ``build_demo_data.py``).
-  * text-to-3d : copy the GT minimal-JSON program, take the input text from the
-    Hub annotation (``text_param`` / ``text_desc``), and *generate* the GT STEP +
-    STL from the minimal-JSON via the same interpreter used to compile
-    predictions (cached STEP/STL are not shipped for most Text2CAD cases).
+    ``fusion360/assembly/_shared_cache/<uid>/`` (mirrors ``build_demo_data.py``);
+    requires the Fusion 360 geometry at ``--source-root``.
+  * text-to-3d : take the GT minimal-JSON program (from the local source-root if
+    present, else the Hub-shipped program — so no local Text2CAD tree is needed),
+    the input text from the Hub annotation (``text_param`` / ``text_desc``), and
+    *generate* the GT STEP + STL from the minimal-JSON via the same interpreter
+    used to compile predictions (cached STEP/STL are not shipped).
 
 The build is idempotent: a case whose target files already exist is skipped
 unless ``overwrite=True``; a UID whose upstream assets are missing is skipped
@@ -102,6 +105,31 @@ def load_hf_qa(token: Optional[str] = None) -> dict[str, list]:
         row = json.loads(line)
         if row.get("uid") and row.get("questions"):
             out[row["uid"]] = row["questions"]
+    return out
+
+
+def load_hf_minimal_json(token: Optional[str] = None) -> dict[str, str]:
+    """Return ``{uid: minimal_json_program}`` from the Hub Text-to-3D GT programs.
+
+    ``data/text_to_3d/minimal_json.jsonl`` ships the redistributable Text2CAD-derived
+    GT CAD program for every Text-to-3D case (Text2CAD is CC BY-NC-SA 4.0), one row
+    ``{"uid", "minimal_json"}`` where ``minimal_json`` is the program serialized as a
+    JSON string. With it, the Text-to-3D split materializes with **no local Text2CAD
+    tree**. ``{}`` when the file is absent (older Hub revision), in which case
+    ``build_text`` falls back to the local ``--source-root`` minimal_json.
+    """
+    try:
+        path = _hf_download("data/text_to_3d/minimal_json.jsonl", token)
+    except Exception as exc:
+        logger.info("no Hub minimal_json (%s); falling back to source-root minimal_json/", exc)
+        return {}
+    out: dict[str, str] = {}
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get("uid") and row.get("minimal_json"):
+            out[row["uid"]] = row["minimal_json"]
     return out
 
 
@@ -262,9 +290,10 @@ def build_assembly(uids, source_root, annotations, *, max_edge, overwrite, limit
     return rows, skipped
 
 
-def build_text(uids, source_root, annotations, *, max_edge, overwrite, limit, qa_map=None):
+def build_text(uids, source_root, annotations, *, max_edge, overwrite, limit, qa_map=None, mj_map=None):
     t2c = source_root / "text2cad"
     qa_map = qa_map or {}
+    mj_map = mj_map or {}
     rows, skipped = [], []
     for i, uid in enumerate(uids):
         if limit and len(rows) >= limit:
@@ -272,7 +301,14 @@ def build_text(uids, source_root, annotations, *, max_edge, overwrite, limit, qa
         bucket, fid = uid.split("/")
         cid = f"p3d_text-to-3d_{i:06d}"
         mj_src = t2c / "minimal_json" / bucket / fid / "minimal_json" / f"{fid}.json"
-        if not mj_src.exists():
+        # GT program: prefer the local source-root file; fall back to the
+        # redistributable Hub-shipped program (Text2CAD is CC BY-NC-SA 4.0) so the
+        # Text-to-3D split builds with no local Text2CAD tree.
+        if mj_src.exists():
+            code_text = mj_src.read_text(encoding="utf-8")
+        elif uid in mj_map:
+            code_text = mj_map[uid]
+        else:
             skipped.append((uid, "missing minimal_json"))
             continue
         ann = annotations.get(uid, {})
@@ -288,12 +324,14 @@ def build_text(uids, source_root, annotations, *, max_edge, overwrite, limit, qa
         code_rel = f"targets/minimal-json/{cid}.json"
         step_rel = f"targets/step/{cid}.step"
         mesh_rel = f"targets/mesh/{cid}.stl"
-        _copy(mj_src, FULL_ROOT / code_rel)
+        code_dst = FULL_ROOT / code_rel
+        code_dst.parent.mkdir(parents=True, exist_ok=True)
+        code_dst.write_text(code_text, encoding="utf-8")
 
         # Generate GT STEP + STL from the minimal-JSON (cached copies are not shipped).
         step_dst, mesh_dst = FULL_ROOT / step_rel, FULL_ROOT / mesh_rel
         if not _done([step_dst, mesh_dst], overwrite):
-            ok = _gen_step_stl_from_minimal_json(mj_src.read_text(encoding="utf-8"), step_dst, mesh_dst)
+            ok = _gen_step_stl_from_minimal_json(code_text, step_dst, mesh_dst)
             if not ok:
                 skipped.append((uid, "GT minimal-json failed to compile"))
                 continue
@@ -420,7 +458,8 @@ def build_full(
     for task in tasks:
         uids = load_hf_uids(task, token)
         anns = load_hf_annotations(task, token)
-        extra = {"qa_map": load_hf_qa(token)} if task == "text-to-3d" else {}
+        extra = ({"qa_map": load_hf_qa(token), "mj_map": load_hf_minimal_json(token)}
+                 if task == "text-to-3d" else {})
         rows, skipped = _BUILDERS[task](
             uids, source_root, anns, max_edge=max_edge, overwrite=overwrite, limit=limit, **extra
         )

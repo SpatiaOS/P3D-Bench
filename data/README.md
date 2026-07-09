@@ -7,11 +7,15 @@ Current data support:
   pipeline (`p3dbench validate --split demo`).
 - **`full`** — the complete **P3D-Dataset** (Text-to-3D 400 / Image-to-3D 400 /
   Assembly-3D 203). [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)
-  publishes the *redistributable* metadata — the UID lists and P3D text/assembly
-  annotations — but not the upstream raw geometry. `p3dbench download --split full
-  --source-root <path>` pulls that metadata and **materializes** an evaluator-ready
-  `full/` tree + `manifests/*_full.jsonl` from a local copy of the upstream working
-  trees, after which `--split full` works across the CLI. See
+  publishes the *redistributable* assets — the UID lists, P3D text/assembly
+  annotations, and the Text-to-3D **GT CAD programs** (Text2CAD-derived
+  minimal-JSON, CC BY-NC-SA 4.0) — but not the Fusion 360 Gallery raw geometry.
+  So **Text-to-3D materializes from the Hub with nothing local**
+  (`p3dbench download --split full --tasks text-to-3d`), while Image-/Assembly-3D
+  need a local copy of the Fusion 360 geometry:
+  `p3dbench download --split full --source-root <path>` pulls the Hub assets and
+  **materializes** an evaluator-ready `full/` tree + `manifests/*_full.jsonl`,
+  after which `--split full` works across the CLI. See
   [`docs/DATA.md`](../docs/DATA.md) for the expected `--source-root` layout.
   Cases whose upstream assets are missing in the local copy (or whose GT program
   fails to compile) are skipped — reported, not fatal — so a materialized split can

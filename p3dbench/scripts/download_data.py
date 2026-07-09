@@ -2,12 +2,14 @@
 
 - ``demo`` split: ships in-repo (``data/demo/`` + ``data/manifests/``); this only
   reports presence.
-- ``full`` split: downloads the redistributable UID lists + P3D annotations from
-  HuggingFace (``SpatiaOS/P3D-Bench``) and materializes an evaluator-ready
-  ``data/full/`` tree + ``data/manifests/*_full.jsonl`` from a local
-  ``--source-root`` (the Fusion 360 + Text2CAD working trees). The Hub does not
-  redistribute upstream raw geometry, so the source root must hold it (obtain it
-  from the upstream datasets under their licenses — see ``docs/DATA.md``).
+- ``full`` split: downloads the redistributable assets from HuggingFace
+  (``SpatiaOS/P3D-Bench``) — the UID lists, P3D annotations, and the Text-to-3D GT
+  CAD programs (Text2CAD-derived minimal-JSON, CC BY-NC-SA 4.0) — and materializes
+  an evaluator-ready ``data/full/`` tree + ``data/manifests/*_full.jsonl``.
+  Text-to-3D builds entirely from the Hub (no local Text2CAD tree needed);
+  Image-/Assembly-3D need the Fusion 360 Gallery raw geometry, which the Hub does
+  **not** redistribute, so a local ``--source-root`` must hold it (obtain it under
+  Autodesk's license — see ``docs/DATA.md``).
 """
 
 from __future__ import annotations
@@ -43,19 +45,25 @@ def download(
 
     src = Path(source_root) if source_root else DEFAULT_SOURCE_ROOT
     sel_tasks = tasks or ALL_TASKS
+    fusion_tasks = tuple(t for t in sel_tasks if t in ("image-to-3d", "assembly-3d"))
 
     print(f"Full split: UID lists + annotations from {HF_URL}")
     if not src.exists():
-        print(
-            f"\nLocal source root not found: {src}\n"
-            "The Hub publishes only UID lists + annotations, not upstream raw geometry.\n"
-            "Obtain the upstream assets (Fusion 360 Gallery + Text2CAD) under their\n"
-            "licenses and pass their location with `--source-root PATH` (see docs/DATA.md).\n"
-            "Layout expected under <source-root>:\n"
-            "  fusion360/assembly/{assembly,_shared_cache}/<uid>/...   (image- & assembly-3d)\n"
-            "  text2cad/minimal_json/<bucket>/<id>/minimal_json/<id>.json   (text-to-3d)"
-        )
-        return
+        # Text-to-3D materializes entirely from the Hub (the GT programs ship there,
+        # redistributable under Text2CAD's CC BY-NC-SA 4.0). Only the Fusion 360
+        # tasks (image-/assembly-3d) need the raw geometry at --source-root.
+        if fusion_tasks:
+            print(
+                f"\nLocal source root not found: {src}\n"
+                "Image-/Assembly-3D need the Fusion 360 Gallery raw geometry, which is not\n"
+                "redistributable. Obtain it under Autodesk's license and pass it with\n"
+                "`--source-root PATH` (see docs/DATA.md). Expected layout:\n"
+                "  fusion360/assembly/{assembly,_shared_cache}/<uid>/...   (image- & assembly-3d)\n"
+                f"Skipping without a source root: {', '.join(fusion_tasks)}"
+            )
+        if "text-to-3d" not in sel_tasks:
+            return
+        print("Proceeding with text-to-3d from the Hub (no local source root needed).")
 
     print(f"Materializing into data/full/ from source-root={src}  tasks={','.join(sel_tasks)}"
           + (f"  limit={limit}" if limit else "") + (f"  max_edge={max_edge}" if max_edge else ""))
