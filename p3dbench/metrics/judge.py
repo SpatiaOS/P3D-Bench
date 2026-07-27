@@ -583,9 +583,9 @@ def answer_qa_bank(
     Args:
         llm_client: a :class:`p3dbench.models.ModelClient`.
         qa_bank: the shipped bank dict (``semantic`` + ``param`` splits).
-        pred_render_paths: one or more predicted render images. Four paths are
-            treated as the canonical view set (2 from above, 2 from below at
-            ±30°); a single path is still accepted.
+        pred_render_paths: the canonical predicted view set — exactly
+            ``N_JUDGE_VIEWS`` paths in VIEW_ANGLES order (2 from above,
+            2 from below at ±30°).
         fmt_slug: prediction format slug (e.g. ``"minimal-json"``).
         artifact_text: the predicted source artifact, in full.
         artifact_label: human label for the artifact; defaults from ``fmt_slug``.
@@ -593,12 +593,18 @@ def answer_qa_bank(
         pred_stl_path: optional predicted STL for the measured-bbox sanity block.
 
     Returns the raw answer payload ``{"answers": [...]}``. Raises ``ValueError``
-    on an unparseable answer payload (single-shot: no retry).
+    on an unparseable answer payload (single-shot: no retry) or on a view set
+    that is not the canonical one.
     """
     pred_renders = [Path(p) for p in _normalize_image_list(pred_render_paths)
                     if Path(p).exists()]
     if not pred_renders:
         raise FileNotFoundError(f"Prediction render not found: {pred_render_paths}")
+    if len(pred_renders) != N_JUDGE_VIEWS:
+        raise ValueError(
+            f"QA answering needs exactly {N_JUDGE_VIEWS} prediction views, "
+            f"got {len(pred_renders)}"
+        )
 
     questions = _bank_questions(qa_bank)
     if not questions:
@@ -610,28 +616,18 @@ def answer_qa_bank(
     mesh_summary = _extract_pred_mesh_summary(pred_stl_path)
     mesh_block = f"\n\n{mesh_summary}\n" if mesh_summary else ""
 
-    multiview = len(pred_renders) == N_JUDGE_VIEWS
-    if multiview:
-        image_note = f"the attached predicted render images ({N_JUDGE_VIEWS} views)"
-        view_desc = (
-            f"The attached images are {N_JUDGE_VIEWS} rendered views of the "
-            "predicted CAD object from a tetrahedral coverage:\n"
-            "  Image 1: top-front-right diagonal looking down\n"
-            "  Image 2: top-back-left diagonal looking down\n"
-            "  Image 3: bottom-back-right diagonal looking up\n"
-            "  Image 4: bottom-front-left diagonal looking up\n"
-        )
-    else:
-        image_note = "the attached predicted render image"
-        view_desc = ""
-
     prompt = f"""Answer the following multiple-choice CAD evaluation questions.
 
 You have access to ONLY these sources — use nothing else:
-1. {image_note} of the predicted CAD object
+1. The attached predicted render images ({N_JUDGE_VIEWS} views) of the predicted CAD object
 2. The prediction artifact text below (the source code or JSON that defines the predicted object)
 3. The measured mesh dimensions below (programmatically extracted from the actual built model){mesh_block}
-{view_desc}
+The attached images are {N_JUDGE_VIEWS} rendered views of the predicted CAD object from a tetrahedral coverage:
+  Image 1: top-front-right diagonal looking down
+  Image 2: top-back-left diagonal looking down
+  Image 3: bottom-back-right diagonal looking up
+  Image 4: bottom-front-left diagonal looking up
+
 Prediction format: {fmt_slug}
 Prediction artifact path: {artifact_name}
 Prediction artifact type: {artifact_label}
@@ -919,12 +915,13 @@ class _JudgeBucket(MetricBucket):
         if not pred_stl:
             return out  # invalid prediction: nothing to render / answer about
 
-        # Render the canonical view set for the answerer (falls back to
-        # whatever the backend produced if it returns fewer views).
+        # Render the canonical view set for the answerer. STRICT, as for the
+        # visual judge: anything other than the full set is an evaluation gap,
+        # so skip rather than score the case off a partial view set.
         render_dir = ctx.work_dir / "qa_render"
         views = _render_pred_multiview(str(pred_stl), render_dir)
-        if not views:
-            return out  # no render backend / failed render -> clean skip
+        if len(views) != N_JUDGE_VIEWS:
+            return out  # no render backend / incomplete render -> clean skip
 
         artifact_text = ctx.shared.get("stage1_code") or ""
 

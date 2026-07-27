@@ -70,9 +70,9 @@ The model is set in [`configs/judge.yaml`](../configs/judge.yaml). Two families:
   bank that ships with the data (`targets/qa/<id>.json`). **QA-S** = accuracy over
   the 4 semantic questions, **QA-P** = accuracy over the 8 parametric questions.
   The answerer sees only the prediction's 4 canonical renders, source artifact
-  text, and a bbox summary (a single render is still accepted if the backend
-  returns fewer views). Banks are dataset artifacts; the release does **not**
-  regenerate them.
+  text, and a bbox summary. As for the visual judge the view set is strict — a
+  case whose prediction does not render all 4 views is skipped. Banks are dataset
+  artifacts; the release does **not** regenerate them.
 
 ## Part (Assembly-3D only)
 
