@@ -62,11 +62,17 @@ The model is set in [`configs/judge.yaml`](../configs/judge.yaml). Two families:
   one call, scored 1–10 on **J-Geo** (shape similarity), **J-Sem** (semantic
   identity), **J-Aes** (aesthetics/detail, semantic-gated: capped to [1,3] when
   J-Sem < 4). Pairing is strict — if either side lacks 4 views the case is skipped.
+  When the case carries an input text (`input.text`) it is passed to the judge
+  alongside the renders: Assembly-3D supplies the assembly specification, while
+  Image-to-3D has no text and is judged from the 8 renders alone. The source code
+  is never shown to the visual judge.
 - **QA** (Text-to-3D): the prediction is probed with a prebuilt multiple-choice
   bank that ships with the data (`targets/qa/<id>.json`). **QA-S** = accuracy over
   the 4 semantic questions, **QA-P** = accuracy over the 8 parametric questions.
-  The answerer sees only the prediction's render, source artifact text, and a
-  bbox summary. Banks are dataset artifacts; the release does **not** regenerate them.
+  The answerer sees only the prediction's 4 canonical renders, source artifact
+  text, and a bbox summary (a single render is still accepted if the backend
+  returns fewer views). Banks are dataset artifacts; the release does **not**
+  regenerate them.
 
 ## Part (Assembly-3D only)
 
