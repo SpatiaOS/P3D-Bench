@@ -36,6 +36,8 @@ PAPER_PROMPT_GOLDEN_SHA256 = {
     "judge_visual_fixture_v1": "a355304fec2e82e45edef555f493e0e42672fbcbb7a048e8eb7458646b4cd31a",
     "qa_answer_fixture_v1": "378d6dfbcf61acb7e64c9d684461e234f236763c521a525b4e78b1ddfe35460c",
     "qa_answer_system_v1": "7793ecf39b464d66e512ef5c101b20bd7383decb5d557feb1849d89fffabe64d",
+    "part_decompose_cadquery_fixture_v1": "9743d8c304fb87bd9164c004f35f6a91cef572d8fe64e3f0eeb6605c819a31b4",
+    "part_decompose_openscad_fixture_v1": "a6d6ca621a03471ea761c9f08bef9cfaad3c3be8e09599999805c4d831ab434c",
 }
 
 

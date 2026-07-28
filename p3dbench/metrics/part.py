@@ -3,9 +3,9 @@
 Per-part evaluation for Assembly-3D (PartFS, PartMatchF1). Given a list of
 GT part meshes and a list of predicted (decomposed) part meshes for one case, it:
 
-1. (Optionally) drops the case under a *fidelity gate* when the decomposition step
-   redesigned the geometry (CD > 5e-4 AND IoU-V < 0.95) — all numerics become None
-   so the case leaves aggregate means instead of penalising the model.
+1. Applies a *fidelity gate* when the decomposition step redesigned the geometry
+   (CD > 5e-4 AND IoU-V < 0.95). Under the frozen paper protocol, a rejected
+   decomposition is worst-filled, while unavailable gate evidence blocks release.
 2. Dedups both sides by a rotation/translation-invariant geometric fingerprint
    (collapses N repeated instances of one body into 1 representative).
 3. Maps every part of a side through ONE shared transform (GT: its own union-bbox
@@ -33,11 +33,23 @@ from __future__ import annotations
 
 import itertools
 import logging
+import math
+from numbers import Real
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..utils import require
-from .base import MetricBucket, ScoreContext
+from .base import (
+    PART_PROTOCOL_STATUS_KEY,
+    PART_STATUS_DECOMPOSITION_UNUSABLE,
+    PART_STATUS_EVALUATOR_GAP,
+    PART_STATUS_FIDELITY_REJECTED,
+    PART_STATUS_FIDELITY_UNAVAILABLE,
+    PART_STATUS_MEASURED,
+    PART_STATUS_UNCLASSIFIED_MISSING,
+    MetricBucket,
+    ScoreContext,
+)
 from ..protocol import PAPER_PROTOCOL_ID, append_call_trace, model_call_trace
 
 logger = logging.getLogger(__name__)
@@ -631,8 +643,8 @@ def evaluate_assembly_parts(
 
     Fidelity gate: when ``stage2_fidelity`` shows the decomposition redesigned the
     union (``cd > fidelity_cd_max`` AND ``iou_v < fidelity_iou_min``), every
-    numeric field is None so the case drops from aggregate means. The gate only
-    fires on a well-formed numeric dict; pass ``None`` to disable it.
+    numeric field is None. The formal aggregator recognizes this outcome and
+    worst-fills the required Part metrics on the fixed task denominator.
 
     Count-level (PartMatchF1): a Hungarian pair is accepted iff
     ``f_score >= f_score_min``; recall/precision/F1 over accepted post-dedup unique
@@ -854,11 +866,28 @@ def evaluate_assembly_parts(
 _PART_KEYS = ("part_match_f1", "part_fs")
 
 
-def _empty(note: Optional[str] = None) -> dict:
-    out: dict = {"part_match_f1": None, "part_fs": None}
+def _empty(
+    note: Optional[str] = None,
+    status: str = PART_STATUS_UNCLASSIFIED_MISSING,
+) -> dict:
+    out: dict = {
+        "part_match_f1": None,
+        "part_fs": None,
+        PART_PROTOCOL_STATUS_KEY: status,
+    }
     if note:
         out["part_note"] = note
     return out
+
+
+def _compile_failure_status(errors) -> str:
+    values = [str(error) for error in (errors or []) if str(error)]
+    if values and all(
+        "timed out" in value.lower() or "timeout" in value.lower()
+        for value in values
+    ):
+        return PART_STATUS_EVALUATOR_GAP
+    return PART_STATUS_DECOMPOSITION_UNUSABLE
 
 
 def _stage1_code(ctx: ScoreContext) -> Optional[str]:
@@ -946,15 +975,24 @@ class _PartBucket(MetricBucket):
 
         # 1. Decomposition requires a model client (no retry).
         if ctx.decompose_client is None:
-            return _empty("no decompose_client configured")
+            return _empty(
+                "no decompose_client configured",
+                PART_STATUS_EVALUATOR_GAP,
+            )
 
         # 2. Need the stage-1 unified program to decompose, and a stage-1 union.
         stage1_code = _stage1_code(ctx)
         if not stage1_code:
-            return _empty("stage-1 code unavailable (cannot run decomposition)")
+            return _empty(
+                "stage-1 code unavailable (cannot run decomposition)",
+                PART_STATUS_EVALUATOR_GAP,
+            )
         stage1_stl = ctx.compiled.get("stl")
         if not stage1_stl:
-            return _empty("no valid stage-1 union mesh (compile invalid)")
+            return _empty(
+                "no valid stage-1 union mesh (compile invalid)",
+                PART_STATUS_EVALUATOR_GAP,
+            )
 
         from ..formats import get_format
         from ..tasks.assembly_3d import TASK
@@ -981,7 +1019,10 @@ class _PartBucket(MetricBucket):
             )
         has_image = len(render_paths) == 1
         if ctx.protocol_id == PAPER_PROTOCOL_ID and not has_image:
-            return _empty("aligned stage-1 render unavailable for paper Part protocol")
+            return _empty(
+                "aligned stage-1 render unavailable for paper Part protocol",
+                PART_STATUS_EVALUATOR_GAP,
+            )
 
         # 2. Build the stage-2 decomposition prompt + 3. call the client.
         prompt = TASK.build_decompose_prompt(fmt, stage1_code, has_image)
@@ -1007,11 +1048,24 @@ class _PartBucket(MetricBucket):
                     },
                 ))
         except Exception as exc:
-            return _empty(f"decomposition call failed: {type(exc).__name__}: {exc}")
+            return _empty(
+                f"decomposition call failed: {type(exc).__name__}: {exc}",
+                PART_STATUS_EVALUATOR_GAP,
+            )
 
-        stage2_code = fmt.extract_code(resp.text)
+        try:
+            stage2_code = fmt.extract_code(resp.text)
+        except Exception as exc:
+            return _empty(
+                f"decomposition code extraction failed: "
+                f"{type(exc).__name__}: {exc}",
+                PART_STATUS_DECOMPOSITION_UNUSABLE,
+            )
         if not stage2_code.strip():
-            return _empty("empty decomposition code extraction")
+            return _empty(
+                "empty decomposition code extraction",
+                PART_STATUS_DECOMPOSITION_UNUSABLE,
+            )
 
         # 3. Compile the parts-structured program -> parts_meta.json + parts/*.stl.
         stage2_dir = Path(ctx.work_dir) / "stage2"
@@ -1019,35 +1073,68 @@ class _PartBucket(MetricBucket):
         try:
             cr = fmt.compile(stage2_code, stage2_dir)
         except Exception as exc:
-            return _empty(f"decomposition compile failed: {type(exc).__name__}: {exc}")
+            status = _compile_failure_status([str(exc)])
+            return _empty(
+                f"decomposition compile failed: {type(exc).__name__}: {exc}",
+                status,
+            )
         if not cr.stl:
-            return _empty("decomposition produced no union STL")
+            return _empty(
+                "decomposition produced no union STL",
+                _compile_failure_status(cr.errors),
+            )
         if not cr.parts_meta:
-            return _empty("decomposition produced no parts_meta.json")
+            return _empty(
+                "decomposition produced no parts_meta.json",
+                PART_STATUS_DECOMPOSITION_UNUSABLE,
+            )
 
         pred_union_path = cr.stl
         pred_parts = load_pred_parts_from_dir(Path(cr.parts_meta).parent)
         if not pred_parts:
-            return _empty("no predicted parts after decomposition")
+            return _empty(
+                "no predicted parts after decomposition",
+                PART_STATUS_DECOMPOSITION_UNUSABLE,
+            )
 
         # 4. Stage-2 fidelity (CD/IoU-V of stage2-union vs stage1-union) + gate.
         stage2_fidelity = _compute_stage2_fidelity(stage1_stl, pred_union_path)
+        fidelity_values = (
+            (stage2_fidelity or {}).get("cd"),
+            (stage2_fidelity or {}).get("iou_v"),
+        )
+        if not all(
+            isinstance(value, Real)
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            for value in fidelity_values
+        ):
+            return _empty(
+                "stage-2 fidelity gate unavailable",
+                PART_STATUS_FIDELITY_UNAVAILABLE,
+            )
 
         # 5. GT parts + the shared pred-side align transform.
         gt_part_paths = [p for p in ctx.case.gt_parts if p]
         if not gt_part_paths:
-            return _empty("case has no GT parts")
+            return _empty("case has no GT parts", PART_STATUS_EVALUATOR_GAP)
         # Carry per-part instance_count/role/semantic from the manifest annotations
         # so the metric trusts upstream (HF) dedup rather than re-fingerprinting the
         # GT — see ResolvedCase.gt_parts_meta. Matches the reference dedup behavior.
         gt_parts = ctx.case.gt_parts_meta
         gt_union_path = ctx.case.gt_step or ctx.case.gt_mesh
         if not gt_union_path:
-            return _empty("case has no GT union mesh")
+            return _empty(
+                "case has no GT union mesh",
+                PART_STATUS_EVALUATOR_GAP,
+            )
 
         align_transform_4x4, note = _align_transform_for_part(ctx)
         if align_transform_4x4 is None:
-            return _empty(note or "no align_transform_4x4 available")
+            return _empty(
+                note or "no align_transform_4x4 available",
+                PART_STATUS_EVALUATOR_GAP,
+            )
 
         # 6. Evaluate.
         result = evaluate_assembly_parts(
@@ -1070,8 +1157,21 @@ class _PartBucket(MetricBucket):
         }
         if result.get("fidelity_excluded"):
             out["part_note"] = "fidelity_excluded"
+            out[PART_PROTOCOL_STATUS_KEY] = PART_STATUS_FIDELITY_REJECTED
         elif alignment.get("error"):
             out["part_note"] = alignment["error"]
+            out[PART_PROTOCOL_STATUS_KEY] = PART_STATUS_EVALUATOR_GAP
+        elif all(
+            isinstance(out.get(key), Real)
+            and not isinstance(out.get(key), bool)
+            and math.isfinite(float(out[key]))
+            for key in ("part_match_f1", "part_fs")
+        ):
+            out[PART_PROTOCOL_STATUS_KEY] = PART_STATUS_MEASURED
+        else:
+            out[PART_PROTOCOL_STATUS_KEY] = (
+                PART_STATUS_UNCLASSIFIED_MISSING
+            )
         return out
 
 

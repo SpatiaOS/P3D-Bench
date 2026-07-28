@@ -19,6 +19,10 @@ from .config import DEFAULT_CONFIG_DIR, load_judge_config
 from .data.loader import ResolvedCase, data_root, load_cases, manifest_path
 from .data.schema import Case
 from .metrics.base import (
+    PART_PROTOCOL_STATUS_KEY,
+    PART_STATUS_GENERATION_INVALID,
+    PART_STATUS_MEASURED,
+    PART_WORST_FILL_STATUSES,
     SCORE_BUCKETS,
     ScoreContext,
     bucket_score_for_case,
@@ -26,6 +30,7 @@ from .metrics.base import (
     iou_applicability,
     missing_required_metrics,
     normalize_value,
+    part_required_status,
 )
 from .models import get_client
 from .registry import (
@@ -870,6 +875,47 @@ def summarize(metrics_path: Path, *, out: Path) -> Path:
                 "generation_invalid_cases": generation_invalid,
                 "gap_count": len(iou_applicability_gaps),
                 "gaps": iou_applicability_gaps[:20],
+            }
+        if formal and "part" in requested_buckets:
+            status_counts: Counter = Counter()
+            status_gaps: list[dict] = []
+            for row in grp:
+                if row.get("failure_class") in GAP_FAILURE_CLASSES:
+                    status = str(row.get("failure_class"))
+                    status_gaps.append({
+                        "id": row.get("id"),
+                        "reason": status,
+                    })
+                elif not row.get("valid"):
+                    status = PART_STATUS_GENERATION_INVALID
+                else:
+                    status = part_required_status(
+                        row.get("raw_metrics") or {}
+                    )
+                    if (
+                        status != PART_STATUS_MEASURED
+                        and status not in PART_WORST_FILL_STATUSES
+                    ):
+                        status_gaps.append({
+                            "id": row.get("id"),
+                            "reason": (
+                                f"{PART_PROTOCOL_STATUS_KEY}:{status}"
+                            ),
+                        })
+                status_counts[status] += 1
+            denominator_count = (
+                status_counts[PART_STATUS_MEASURED]
+                + status_counts[PART_STATUS_GENERATION_INVALID]
+                + sum(
+                    status_counts[status]
+                    for status in PART_WORST_FILL_STATUSES
+                )
+            )
+            metric_coverage["part"] = {
+                "status_counts": dict(sorted(status_counts.items())),
+                "denominator_count": denominator_count,
+                "gap_count": len(status_gaps),
+                "gaps": status_gaps[:20],
             }
 
         promotion_blockers = list(dict.fromkeys(promotion_blockers))

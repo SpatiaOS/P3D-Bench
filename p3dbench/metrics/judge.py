@@ -900,6 +900,10 @@ def answer_qa_bank(
         bank_sha = str(paper_contract.get("bank_sha256") or "")
         if len(bank_sha) != 64:
             raise ValueError("Paper QA bank contract is missing SHA-256 provenance")
+        if paper_contract.get("qa_bank_version") != PAPER_QA_BANK_VERSION:
+            raise ValueError(
+                f"Paper QA requires bank v{PAPER_QA_BANK_VERSION}"
+            )
 
     if artifact_label is None:
         artifact_label = ARTIFACT_LABELS.get(fmt_slug.lower(), fmt_slug)

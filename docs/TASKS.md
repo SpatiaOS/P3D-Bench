@@ -62,8 +62,9 @@ formal decomposition model sees the stage-1 code and one aligned render of that
 same predicted union, never the GT part inventory or GT geometry, so part-name
 alignment stays honest. A
 decomposition that redesigns the geometry (fidelity CD > 5e-4 **and** IoU_V <
-0.95 vs the stage-1 union) excludes the case from Part means rather than scoring
-it wrongly.
+0.95 vs the stage-1 union) is not treated as a measured decomposition: the
+formal protocol worst-fills its required Part metrics on the fixed task
+denominator. Missing evaluator evidence instead blocks promotion.
 
 The research code wrapped this in a retry loop; the release keeps the single
 frozen call only.

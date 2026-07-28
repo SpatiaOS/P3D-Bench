@@ -102,8 +102,10 @@ algorithm.
 | **PartFS** | ↑ | mean per-part F-score over all Hungarian pairs |
 | **PartMatchF1** | ↑ | F1 of successful matches (F_part ≥ 0.7): P = M/m, R = M/n |
 
-A case whose decomposition fails the fidelity gate (CD > 5e-4 **and** IoU_V <
-0.95 vs the stage-1 union) is excluded from Part means.
+A non-executable case, an unusable decomposition, or a rejected fidelity gate
+(CD > 5e-4 **and** IoU_V < 0.95 vs the stage-1 union) receives the worst Part
+value and remains in the fixed task denominator. Unavailable fidelity evidence,
+evaluator gaps, and unclassified required-metric gaps block formal promotion.
 
 ## Aggregation → headline Score
 
@@ -113,7 +115,8 @@ A case whose decomposition fails the fidelity gate (CD > 5e-4 **and** IoU_V <
    except TextParam Judge, whose 4 QA-S and 8 QA-P questions use
    `(QA-S + 2·QA-P)/3`.
    A valid case missing any applicable required sub-metric is an evaluation
-   gap, not a partial mean.
+   gap, not a partial mean, unless its Part status is one of the explicit
+   worst-fill outcomes above.
 3. Invalid predictions are worst-filled (normalized 0) for every member sub-metric.
 4. **Score** (the headline figure) = mean of the non-Valid buckets, ×100. The
    task profile is the equal mean of complete per-format groups over exactly

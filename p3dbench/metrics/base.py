@@ -104,6 +104,28 @@ ALL_BUCKETS = ("valid", "geometry", "topology", "judge", "part")
 # Buckets that contribute to the headline Score (Valid reported alongside, excluded).
 SCORE_BUCKETS = ("geometry", "topology", "judge", "part")
 
+PART_PROTOCOL_STATUS_KEY = "part_protocol_status"
+PART_STATUS_MEASURED = "measured"
+PART_STATUS_GENERATION_INVALID = "generation_invalid"
+PART_STATUS_DECOMPOSITION_UNUSABLE = "decomposition_unusable"
+PART_STATUS_FIDELITY_REJECTED = "fidelity_rejected"
+PART_STATUS_FIDELITY_UNAVAILABLE = "fidelity_unavailable"
+PART_STATUS_EVALUATOR_GAP = "evaluator_gap"
+PART_STATUS_UNCLASSIFIED_MISSING = "unclassified_missing"
+PART_WORST_FILL_STATUSES = frozenset({
+    PART_STATUS_DECOMPOSITION_UNUSABLE,
+    PART_STATUS_FIDELITY_REJECTED,
+})
+PART_PROTOCOL_STATUSES = frozenset({
+    PART_STATUS_MEASURED,
+    PART_STATUS_GENERATION_INVALID,
+    PART_STATUS_DECOMPOSITION_UNUSABLE,
+    PART_STATUS_FIDELITY_REJECTED,
+    PART_STATUS_FIDELITY_UNAVAILABLE,
+    PART_STATUS_EVALUATOR_GAP,
+    PART_STATUS_UNCLASSIFIED_MISSING,
+})
+
 
 # --------------------------------------------------------------------------
 # Task/format-conditioned bucket membership (which sub-metrics apply)
@@ -146,6 +168,29 @@ def normalize_value(key: str, value: Optional[float]) -> Optional[float]:
         return spec.normalize(value)
     except (TypeError, ValueError):
         return None
+
+
+def part_required_status(raw_metrics: dict[str, Any]) -> str:
+    """Return the closed Part-denominator status for a formal result row.
+
+    New evaluator rows carry an explicit status. Legacy rows with both required
+    Part metrics remain measurable; a legacy omission without classification is
+    deliberately fail-closed.
+    """
+    status = raw_metrics.get(PART_PROTOCOL_STATUS_KEY)
+    if status in PART_PROTOCOL_STATUSES:
+        if (
+            status in PART_WORST_FILL_STATUSES
+            and not str(raw_metrics.get("part_note") or "").strip()
+        ):
+            return PART_STATUS_UNCLASSIFIED_MISSING
+        return str(status)
+    if all(
+        normalize_value(key, raw_metrics.get(key)) is not None
+        for key in ("part_match_f1", "part_fs")
+    ):
+        return PART_STATUS_MEASURED
+    return PART_STATUS_UNCLASSIFIED_MISSING
 
 
 def iou_applicability(
@@ -203,6 +248,14 @@ def bucket_score_for_case(
     for bucket, keys in membership.items():
         if required_buckets is not None and bucket not in required_buckets:
             continue
+        if valid and required_buckets is not None and bucket == "part":
+            status = part_required_status(raw_metrics)
+            if status in PART_WORST_FILL_STATUSES:
+                out[bucket] = 0.0
+                continue
+            if status != PART_STATUS_MEASURED:
+                out[bucket] = None
+                continue
         vals: list[float] = []
         for key in keys:
             if not valid:
@@ -253,6 +306,13 @@ def missing_required_metrics(
     for bucket, keys in membership.items():
         if required_buckets is not None and bucket not in required_buckets:
             continue
+        if required_buckets is not None and bucket == "part":
+            status = part_required_status(raw_metrics)
+            if status in PART_WORST_FILL_STATUSES:
+                continue
+            if status != PART_STATUS_MEASURED:
+                gaps[bucket] = [f"{PART_PROTOCOL_STATUS_KEY}:{status}"]
+                continue
         missing = []
         for key in keys:
             if key == "iou":

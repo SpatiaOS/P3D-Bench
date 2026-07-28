@@ -12,10 +12,21 @@ import p3dbench.data.full_builder as full_builder
 from p3dbench.data.full_builder import _write_qa_bank
 from p3dbench.data.loader import ResolvedCase
 from p3dbench.data.schema import Case
+from p3dbench.formats import get_format
 from p3dbench.metrics.base import (
+    PART_PROTOCOL_STATUS_KEY,
+    PART_STATUS_DECOMPOSITION_UNUSABLE,
+    PART_STATUS_EVALUATOR_GAP,
+    PART_STATUS_FIDELITY_REJECTED,
+    PART_STATUS_FIDELITY_UNAVAILABLE,
+    PART_STATUS_GENERATION_INVALID,
+    PART_STATUS_MEASURED,
+    PART_STATUS_UNCLASSIFIED_MISSING,
     ScoreContext,
     bucket_score_for_case,
+    bucket_membership,
     missing_required_metrics,
+    part_required_status,
 )
 from p3dbench.metrics.judge import (
     QA_ANSWERER_SYSTEM_PROMPT,
@@ -24,8 +35,10 @@ from p3dbench.metrics.judge import (
     answer_qa_bank,
     llm_judge_score,
 )
+from p3dbench.metrics.part import _compile_failure_status
 from p3dbench.metrics.geometry import iou_csg
 from p3dbench.pipeline import (
+    FAILURE_GENERATION_INVALID,
     FAILURE_INFERENCE_GAP,
     _formal_expected_case_ids,
     _validate_formal_compiled_rows,
@@ -45,6 +58,7 @@ from p3dbench.protocol import (
     validate_paper_source_ids,
 )
 from p3dbench.text_condition import resolve_text_condition
+from p3dbench.tasks.assembly_3d import TASK as ASSEMBLY_TASK
 
 
 @dataclass
@@ -124,6 +138,23 @@ def test_paper_judge_rejects_partial_views_before_call(tmp_path):
     assert not client.calls
 
 
+def test_semantic_only_requires_score_and_nonempty_reason(tmp_path):
+    for payload, fragment in (
+        ('{"semantic": 8}', "reason"),
+        ('{"semantic": true, "reason": "x"}', "semantic"),
+        ('{"semantic": 11, "reason": "x"}', "semantic"),
+    ):
+        result = llm_judge_score(
+            _Client(payload),
+            _images(tmp_path, f"strict_sem_pred_{fragment}", 4),
+            _images(tmp_path, f"strict_sem_gt_{fragment}", 4),
+            semantic_only=True,
+            protocol_id=PAPER_PROTOCOL_ID,
+        )
+        assert result["semantic"] is None
+        assert fragment in result["error"]
+
+
 def test_visual_judge_includes_original_condition_image(tmp_path):
     client = _Client('{"reason":"ok","geometry":7,"semantic":8,"aesthetics":6}')
     condition = _images(tmp_path, "condition", 1)
@@ -137,7 +168,13 @@ def test_visual_judge_includes_original_condition_image(tmp_path):
         enable_semantic=True,
         protocol_id=PAPER_PROTOCOL_ID,
     )
-    assert result["error"] is None
+    assert result == {
+        "geometry": 7,
+        "semantic": 8,
+        "aesthetics": 6,
+        "reason": "ok",
+        "error": None,
+    }
     prompt, kwargs = client.calls[0]
     assert "original model-visible condition image" in prompt
     assert "Images 2..5 are PRED" in prompt
@@ -242,6 +279,24 @@ def test_paper_qa_requires_source_bbox_four_renders_and_prompt_e(
         PAPER_PROMPT_GOLDEN_SHA256["qa_answer_system_v1"]
     )
 
+    wrong_version = {
+        **bank,
+        "_paper_contract": {
+            **bank["_paper_contract"],
+            "qa_bank_version": 8,
+        },
+    }
+    with pytest.raises(ValueError, match="bank v9"):
+        answer_qa_bank(
+            client,
+            wrong_version,
+            _images(tmp_path, "qa_wrong_version", 4),
+            "openscad",
+            "cube();",
+            pred_stl_path=model_stl,
+            protocol_id=PAPER_PROTOCOL_ID,
+        )
+
 
 def test_required_metric_gap_is_not_partial_average():
     raw = {
@@ -266,6 +321,209 @@ def test_required_metric_gap_is_not_partial_average():
     assert missing_required_metrics(
         "image-to-3d", {}, False, required_buckets={"geometry"}
     ) == {}
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_score", "expected_missing"),
+    [
+        (PART_STATUS_MEASURED, 0.7, {}),
+        (PART_STATUS_DECOMPOSITION_UNUSABLE, 0.0, {}),
+        (PART_STATUS_FIDELITY_REJECTED, 0.0, {}),
+        (
+            PART_STATUS_FIDELITY_UNAVAILABLE,
+            None,
+            {"part": [f"{PART_PROTOCOL_STATUS_KEY}:fidelity_unavailable"]},
+        ),
+        (
+            PART_STATUS_EVALUATOR_GAP,
+            None,
+            {"part": [f"{PART_PROTOCOL_STATUS_KEY}:evaluator_gap"]},
+        ),
+        (
+            PART_STATUS_UNCLASSIFIED_MISSING,
+            None,
+            {"part": [f"{PART_PROTOCOL_STATUS_KEY}:unclassified_missing"]},
+        ),
+    ],
+)
+def test_formal_part_status_controls_fixed_denominator(
+    status, expected_score, expected_missing
+):
+    raw = {
+        "part_match_f1": 0.8 if status == PART_STATUS_MEASURED else None,
+        "part_fs": 0.6 if status == PART_STATUS_MEASURED else None,
+        PART_PROTOCOL_STATUS_KEY: status,
+    }
+    if status in {
+        PART_STATUS_DECOMPOSITION_UNUSABLE,
+        PART_STATUS_FIDELITY_REJECTED,
+    }:
+        raw["part_note"] = status
+    score = bucket_score_for_case(
+        "assembly-3d",
+        raw,
+        True,
+        required_buckets={"part"},
+    )["part"]
+    if expected_score is None:
+        assert score is None
+    else:
+        assert score == pytest.approx(expected_score)
+    assert missing_required_metrics(
+        "assembly-3d",
+        raw,
+        True,
+        required_buckets={"part"},
+    ) == expected_missing
+
+    invalid = bucket_score_for_case(
+        "assembly-3d",
+        {},
+        False,
+        required_buckets={"part"},
+    )
+    assert invalid["part"] == 0.0
+
+
+def test_textparam_panel_is_geometry5_topology3():
+    membership = bucket_membership("text-to-3d", "parametric")
+    assert membership["geometry"] == [
+        "chamfer_distance",
+        "f_score_005",
+        "f_score_001",
+        "normal_consistency",
+        "iou",
+    ]
+    assert membership["topology"] == [
+        "no_open_edge",
+        "inverted_normal_ratio",
+        "non_manifold_edge_ratio",
+    ]
+    assert len(membership["geometry"]) == 5
+    assert len(membership["topology"]) == 3
+
+
+def test_legacy_part_missing_is_unclassified_but_complete_pair_is_measured():
+    assert part_required_status({
+        "part_match_f1": 0.8,
+        "part_fs": 0.6,
+    }) == PART_STATUS_MEASURED
+    assert part_required_status({
+        "part_match_f1": 0.8,
+        "part_fs": None,
+    }) == PART_STATUS_UNCLASSIFIED_MISSING
+    assert part_required_status({
+        PART_PROTOCOL_STATUS_KEY: PART_STATUS_DECOMPOSITION_UNUSABLE,
+    }) == PART_STATUS_UNCLASSIFIED_MISSING
+    assert _compile_failure_status(["OpenSCAD timed out"]) == (
+        PART_STATUS_EVALUATOR_GAP
+    )
+    assert _compile_failure_status(["parse failed"]) == (
+        PART_STATUS_DECOMPOSITION_UNUSABLE
+    )
+
+
+def test_formal_part_summary_uses_full_denominator_or_blocks(
+    tmp_path, monkeypatch
+):
+    expected_ids = ["case-1", "case-2", "case-3", "case-4"]
+    contract = {
+        "task_profile": "assembly-3d",
+        "split": "full",
+        "expected_count": len(expected_ids),
+        "ordered_ids_sha256": sha256_text("\n".join(expected_ids)),
+    }
+    monkeypatch.setattr(
+        "p3dbench.pipeline._formal_expected_case_ids",
+        lambda _task, _split: (expected_ids, contract),
+    )
+    common = {
+        "chamfer_distance": 0.001,
+        "f_score_005": 0.8,
+        "f_score_001": 0.5,
+        "normal_consistency": 0.9,
+        "iou": 0.7,
+        "pred_open_edge_ratio": 0.0,
+        "gt_open_edge_ratio": 0.0,
+        "no_open_edge": 1.0,
+        "inverted_normal_ratio": 0.0,
+        "non_manifold_edge_ratio": 0.0,
+        "judge_semantic": 8,
+        "judge_geometry": 7,
+        "judge_aesthetics": 6,
+    }
+
+    def row(case_id, *, valid=True, status=None, match_f1=None, part_fs=None):
+        raw = dict(common)
+        if status is not None:
+            raw[PART_PROTOCOL_STATUS_KEY] = status
+        raw["part_match_f1"] = match_f1
+        raw["part_fs"] = part_fs
+        if status in {
+            PART_STATUS_DECOMPOSITION_UNUSABLE,
+            PART_STATUS_FIDELITY_REJECTED,
+        }:
+            raw["part_note"] = status
+        return {
+            "id": case_id,
+            "task": "assembly-3d",
+            "format": "openscad",
+            "model": "gpt",
+            "split": "full",
+            "text_mode": "parametric",
+            "valid": valid,
+            "failure_class": (
+                None if valid else FAILURE_GENERATION_INVALID
+            ),
+            "buckets": [
+                "valid", "geometry", "topology", "judge", "part",
+            ],
+            "raw_metrics": raw,
+            "protocol_id": PAPER_PROTOCOL_ID,
+            "case_universe": contract,
+        }
+
+    rows = [
+        row(
+            "case-1",
+            status=PART_STATUS_MEASURED,
+            match_f1=0.8,
+            part_fs=0.6,
+        ),
+        row("case-2", valid=False),
+        row("case-3", status=PART_STATUS_DECOMPOSITION_UNUSABLE),
+        row("case-4", status=PART_STATUS_FIDELITY_REJECTED),
+    ]
+    metrics = tmp_path / "part_metrics.jsonl"
+    output = tmp_path / "part_summary.json"
+    _write_jsonl(metrics, rows)
+    summarize(metrics, out=output)
+    group = json.loads(output.read_text(encoding="utf-8"))["groups"][0]
+    assert group["promotion_ready"] is True
+    assert group["buckets"]["part"] == pytest.approx(0.175)
+    assert group["metric_coverage"]["part"]["denominator_count"] == 4
+    assert group["metric_coverage"]["part"]["gap_count"] == 0
+    assert group["metric_coverage"]["part"]["status_counts"] == {
+        PART_STATUS_DECOMPOSITION_UNUSABLE: 1,
+        PART_STATUS_FIDELITY_REJECTED: 1,
+        PART_STATUS_GENERATION_INVALID: 1,
+        PART_STATUS_MEASURED: 1,
+    }
+
+    rows[2] = row(
+        "case-3",
+        status=PART_STATUS_UNCLASSIFIED_MISSING,
+    )
+    _write_jsonl(metrics, rows)
+    summarize(metrics, out=output)
+    blocked = json.loads(
+        output.read_text(encoding="utf-8")
+    )["groups"][0]
+    assert blocked["promotion_ready"] is False
+    assert "required_metric_gap" in blocked["promotion_blockers"]
+    assert "part" not in blocked["buckets"]
+    assert blocked["metric_coverage"]["part"]["denominator_count"] == 3
+    assert blocked["metric_coverage"]["part"]["gap_count"] == 1
 
 
 def test_iou_is_inapplicable_for_open_edges_but_missing_when_eligible():
@@ -584,6 +842,18 @@ def test_formal_renderer_uses_only_frozen_blender_profile(
         "samples": 128,
         "seed": 42,
     }]
+
+
+@pytest.mark.parametrize("fmt", ["cadquery", "openscad"])
+def test_part_decomposition_prompt_matches_frozen_golden(fmt):
+    prompt = ASSEMBLY_TASK.build_decompose_prompt(
+        get_format(fmt),
+        "FIXTURE_CODE",
+        True,
+    )
+    assert sha256_text(prompt) == PAPER_PROMPT_GOLDEN_SHA256[
+        f"part_decompose_{fmt}_fixture_v1"
+    ]
 
 
 def test_judge_bucket_preserves_scientific_and_qa_evidence(
