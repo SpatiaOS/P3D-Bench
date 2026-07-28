@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import math
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -27,6 +28,7 @@ class ScoreContext:
     work_dir: Path
     judge_client: Any = None          # models.ModelClient or None
     decompose_client: Any = None      # models.ModelClient or None
+    protocol_id: Optional[str] = None
     # Cross-bucket cache (e.g. geometry stores align_transform_4x4 for part metric).
     shared: dict = field(default_factory=dict)
 
@@ -146,29 +148,122 @@ def normalize_value(key: str, value: Optional[float]) -> Optional[float]:
         return None
 
 
+def iou_applicability(
+    raw_metrics: dict[str, Any],
+    valid: bool,
+) -> Optional[bool]:
+    """Return whether IoU applies to this case under the paper NoOE gate.
+
+    Invalid predictions are worst-filled before applicability is consulted.
+    For a valid prediction, IoU is eligible only when both the prediction and
+    GT raw open-edge ratios are finite and exactly zero.  A non-zero ratio
+    makes IoU inapplicable; absent/non-finite topology evidence is an evaluator
+    gap, represented by ``None``.
+    """
+    if not valid:
+        return True
+    ratios = (
+        raw_metrics.get("pred_open_edge_ratio"),
+        raw_metrics.get("gt_open_edge_ratio"),
+    )
+    has_unknown = False
+    for value in ratios:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            has_unknown = True
+            continue
+        value = float(value)
+        if not math.isfinite(value) or value < 0.0:
+            has_unknown = True
+            continue
+        if value > 0.0:
+            return False
+    return None if has_unknown else True
+
+
 def bucket_score_for_case(
     task: str,
     raw_metrics: dict[str, Any],
     valid: bool,
     text_mode: str = "parametric",
+    required_buckets: Optional[set[str]] = None,
 ) -> dict[str, Optional[float]]:
     """Normalized per-bucket score for ONE case.
 
     Worst-fill: a case failing the Valid gate contributes 0.0 for every member
-    sub-metric (worst value -> normalized 0). A member sub-metric that is simply
-    not measured for a valid case (e.g. IoU skipped because the mesh is open) is
-    dropped from that bucket's mean rather than zero-filled.
+    sub-metric (worst value -> normalized 0). In ordinary diagnostic mode
+    (``required_buckets=None``), unmeasured sub-metrics retain the legacy
+    drop-from-mean behavior. In a formal run, a valid case missing any required
+    applicable sub-metric returns ``None`` for that bucket: this is an
+    evaluator gap and must not be hidden by averaging the remaining
+    sub-metrics. IoU is omitted from a valid case's geometry denominator when
+    either raw PRED or GT open-edge ratio is non-zero.
     """
     membership = bucket_membership(task, text_mode)
     out: dict[str, Optional[float]] = {}
     for bucket, keys in membership.items():
+        if required_buckets is not None and bucket not in required_buckets:
+            continue
         vals: list[float] = []
         for key in keys:
             if not valid:
                 vals.append(0.0)
                 continue
+            if key == "iou":
+                applicable = iou_applicability(raw_metrics, valid)
+                if applicable is False:
+                    continue
+                if applicable is None:
+                    if required_buckets is not None:
+                        vals = []
+                        break
+                    continue
             nv = normalize_value(key, raw_metrics.get(key))
-            if nv is not None:
-                vals.append(nv)
-        out[bucket] = (sum(vals) / len(vals)) if vals else None
+            if nv is None:
+                if required_buckets is not None:
+                    vals = []
+                    break
+                continue
+            vals.append(nv)
+        if (
+            task == "text-to-3d"
+            and text_mode == "parametric"
+            and bucket == "judge"
+            and len(vals) == 2
+        ):
+            # QA-S has four questions and QA-P has eight questions per case.
+            # The paper Judge cell is their question-level micro-average.
+            out[bucket] = (vals[0] + 2.0 * vals[1]) / 3.0
+        else:
+            out[bucket] = (sum(vals) / len(vals)) if vals else None
     return out
+
+
+def missing_required_metrics(
+    task: str,
+    raw_metrics: dict[str, Any],
+    valid: bool,
+    text_mode: str = "parametric",
+    required_buckets: Optional[set[str]] = None,
+) -> dict[str, list[str]]:
+    """Return missing applicable required sub-metrics for a valid prediction."""
+    if not valid:
+        return {}
+    membership = bucket_membership(task, text_mode)
+    gaps: dict[str, list[str]] = {}
+    for bucket, keys in membership.items():
+        if required_buckets is not None and bucket not in required_buckets:
+            continue
+        missing = []
+        for key in keys:
+            if key == "iou":
+                applicable = iou_applicability(raw_metrics, valid)
+                if applicable is False:
+                    continue
+                if applicable is None:
+                    missing.append("iou_applicability")
+                    continue
+            if normalize_value(key, raw_metrics.get(key)) is None:
+                missing.append(key)
+        if missing:
+            gaps[bucket] = missing
+    return gaps

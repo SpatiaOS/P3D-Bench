@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..data.schema import Case
 from ..formats.base import Format
+from ..text_condition import resolve_text_condition
 from .base import PromptBundle, Task
 
 PROMPT_TEMPLATE = """\
@@ -28,11 +29,7 @@ class TextTo3DTask(Task):
         self, fmt: Format, case: Case, image_paths: list[str], *, text_mode: str = "parametric"
     ) -> PromptBundle:
         self.check_format(fmt)
-        # parametric (default) uses the precise expert text in input.text; descriptive
-        # uses the natural-language annotation when the manifest carries one.
-        text = case.input.text
-        if text_mode == "descriptive":
-            text = (case.metadata.get("text_desc") or "").strip() or text
+        text = resolve_text_condition(case, text_mode)
         user = PROMPT_TEMPLATE.format(display_name=fmt.display_name, text=text)
         return PromptBundle(system=fmt.system_guidelines, user=user, images=[])
 

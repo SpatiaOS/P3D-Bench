@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional
 
 from ..utils import require
 from .base import MetricBucket, ScoreContext
+from ..protocol import PAPER_PROTOCOL_ID, append_call_trace, model_call_trace
 
 logger = logging.getLogger(__name__)
 
@@ -960,16 +961,51 @@ class _PartBucket(MetricBucket):
 
         fmt = get_format(ctx.fmt)
 
-        # Single render of the pred geometry as an optional visual cue. The demo
-        # harness does not require a render; infer part boundaries from the code.
-        has_image = False
+        # Frozen paper protocol: the decomposer consumes the stage-1 program and
+        # one render of the aligned stage-1 prediction.  Never substitute a GT
+        # image or force the code-only branch.
+        from .judge import _aligned_pred_source, _render_pred_multiview
+
+        render_paths = []
+        if ctx.protocol_id == PAPER_PROTOCOL_ID:
+            pred_source = _aligned_pred_source(ctx)
+            render_paths = (
+                _render_pred_multiview(
+                    pred_source,
+                    Path(ctx.work_dir) / "part_render",
+                    n_views=1,
+                    protocol_id=ctx.protocol_id,
+                    allow_paper_single_view=True,
+                )
+                if pred_source else []
+            )
+        has_image = len(render_paths) == 1
+        if ctx.protocol_id == PAPER_PROTOCOL_ID and not has_image:
+            return _empty("aligned stage-1 render unavailable for paper Part protocol")
 
         # 2. Build the stage-2 decomposition prompt + 3. call the client.
         prompt = TASK.build_decompose_prompt(fmt, stage1_code, has_image)
         try:
             resp = ctx.decompose_client.generate(
-                prompt, system=fmt.system_guidelines, timeout=300,
+                prompt,
+                images=render_paths or None,
+                system=fmt.system_guidelines,
+                timeout=300,
             )
+            if ctx.protocol_id == PAPER_PROTOCOL_ID:
+                append_call_trace(ctx.shared, model_call_trace(
+                    kind="part_decomposition",
+                    client=ctx.decompose_client,
+                    response=resp,
+                    prompt=prompt,
+                    images=render_paths,
+                    system=fmt.system_guidelines,
+                    request_overrides={
+                        "timeout_s": 300,
+                        "image_count": len(render_paths),
+                        "uses_aligned_prediction_render": has_image,
+                    },
+                ))
         except Exception as exc:
             return _empty(f"decomposition call failed: {type(exc).__name__}: {exc}")
 

@@ -81,8 +81,16 @@ if _IN_BLENDER:
         out_dir = rest[1]
         yfov = float(rest[2])
         resolution = int(rest[3])
-        views = json.loads(Path(rest[4]).read_text())
-        return mesh_npz, out_dir, yfov, resolution, views
+        if len(rest) >= 7:
+            samples = int(rest[4])
+            seed = int(rest[5])
+            views_path = rest[6]
+        else:
+            samples = 128
+            seed = 0
+            views_path = rest[4]
+        views = json.loads(Path(views_path).read_text())
+        return mesh_npz, out_dir, yfov, resolution, samples, seed, views
 
     def reset_scene():
         bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -223,7 +231,7 @@ if _IN_BLENDER:
         out = nt.nodes.new("ShaderNodeOutputWorld")
         nt.links.new(mix.outputs[0], out.inputs[0])
 
-    def setup_render(resolution: int):
+    def setup_render(resolution: int, samples: int, seed: int):
         scene = bpy.context.scene
         scene.render.engine = "CYCLES"
 
@@ -251,7 +259,8 @@ if _IN_BLENDER:
             else:
                 scene.cycles.device = "CPU"
 
-        scene.cycles.samples = 128
+        scene.cycles.samples = samples
+        scene.cycles.seed = seed
         scene.cycles.use_denoising = True
         scene.cycles.denoiser = "OPENIMAGEDENOISE"
         scene.cycles.max_bounces = 4
@@ -379,7 +388,7 @@ if _IN_BLENDER:
         bpy.ops.render.render(write_still=True)
 
     def bpy_main():
-        mesh_npz, out_dir, yfov, resolution, views = parse_args()
+        mesh_npz, out_dir, yfov, resolution, samples, seed, views = parse_args()
         Path(out_dir).mkdir(parents=True, exist_ok=True)
 
         reset_scene()
@@ -388,7 +397,7 @@ if _IN_BLENDER:
         mat = build_clay_material(sss_scale=radius * 0.04)
         assign_material(obj, mat)
         setup_world(_find_studio_hdri())
-        setup_render(resolution)
+        setup_render(resolution, samples, seed)
 
         max_dist = max(
             float(np.linalg.norm(np.asarray(v["eye"]) - center)) for v in views
@@ -428,6 +437,8 @@ else:
 
     PYRENDER_DEFAULT_YFOV = 0.6
     CLAY_DEFAULT_RESOLUTION = 768
+    CLAY_DEFAULT_SAMPLES = 128
+    CLAY_DEFAULT_SEED = 0
     DEFAULT_BLENDER_TIMEOUT = 900  # seconds for one subprocess (all views)
 
     # Re-invoke this very file: Blender's `-P` runs it, hits _IN_BLENDER, lands
@@ -511,7 +522,8 @@ else:
         }
 
     def _run_blender(mesh_npz: Path, views, out_dir: Path,
-                     yfov: float, resolution: int, timeout_s: int) -> bool:
+                     yfov: float, resolution: int, samples: int, seed: int,
+                     timeout_s: int) -> bool:
         blender_bin = _resolve_blender_bin()
         if not blender_bin or not Path(blender_bin).exists():
             logger.warning("Blender binary unavailable (set $P3DBENCH_BLENDER)")
@@ -525,7 +537,8 @@ else:
 
         cmd = [
             blender_bin, "-b", "-P", _BPY_SCRIPT, "--",
-            str(mesh_npz), str(out_dir), str(yfov), str(resolution), views_json,
+            str(mesh_npz), str(out_dir), str(yfov), str(resolution),
+            str(samples), str(seed), views_json,
         ]
         try:
             proc = subprocess.run(
@@ -553,7 +566,10 @@ else:
         return True
 
     def render_multiview(mesh_or_step_path, output_dir, *,
-                         n_views: int = 4) -> List[str]:
+                         n_views: int = 4,
+                         resolution: int = CLAY_DEFAULT_RESOLUTION,
+                         samples: int = CLAY_DEFAULT_SAMPLES,
+                         seed: int = CLAY_DEFAULT_SEED) -> List[str]:
         """Render ``n_views`` clay judge views via a single Blender subprocess.
 
         Returns ``[]`` if ``P3DBENCH_BLENDER`` is unset / missing, the mesh fails
@@ -609,7 +625,9 @@ else:
             ok = _run_blender(
                 npz, views, Path(tmpdir),
                 yfov=PYRENDER_DEFAULT_YFOV,
-                resolution=CLAY_DEFAULT_RESOLUTION,
+                resolution=resolution,
+                samples=samples,
+                seed=seed,
                 timeout_s=DEFAULT_BLENDER_TIMEOUT,
             )
             if not ok:

@@ -59,6 +59,7 @@ include = ["p3dbench*"]
 
 [tool.setuptools.package-data]
 p3dbench = [
+    "data/contracts/*.json",
     "compile/three/package.json",
     "compile/three/README.md",
     "compile/three/build/*.js",

@@ -57,8 +57,17 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
   and **materializes** an evaluator-ready `data/full/` tree +
   `data/manifests/*_full.jsonl` (identical layout to the demo):
 
+  Paper reproduction pins the dataset release and validates the three ordered
+  UID lists, exact task counts, QA source SHA and normalized 12,800-question
+  digest against
+  [`p3d-aaai27-paper-protocol-v1.json`](../p3dbench/data/contracts/p3d-aaai27-paper-protocol-v1.json).
+  Each materialized row embeds that source contract; a partial, reordered or
+  provenance-mismatched manifest fails before evaluator-model calls. The
+  compiled artifact must also embed a byte-for-JSON-equivalent canonical case
+  record, so changing its source ID, condition or GT path is rejected.
+
   ```bash
-  # Text-to-3D only — nothing local needed (GT programs come from the Hub):
+  # Text-to-3D only — no local dataset needed; Blender is still required:
   p3dbench download --split full --tasks text-to-3d
   # A) all tasks, prebuilt research _shared_cache present -> one-click materialize:
   p3dbench download --split full --source-root /path/to/cad_dataset
@@ -85,7 +94,11 @@ One JSONL row per case under `data/manifests/<task>_<split>.jsonl`
   present, else the Hub-shipped program) and **generates** the GT
   STEP + STL from it via the same interpreter used to compile predictions
   (Text2CAD STEP/STL are not cached for most cases). The build is idempotent and
-  reports any UID whose upstream assets are missing. Text-to-3D **QA banks** come
+  reports any UID whose upstream assets are missing. Text-to-3D materialization
+  renders exactly four GT Blender-clay views at 768×768, 128 samples and seed
+  42 from the generated GT mesh; a renderer failure remains an explicit
+  materialization gap and the paper validator refuses to proceed.
+  Text-to-3D **QA banks** come
   from the Hub `qa.jsonl` (so the Judge bucket works even on the from-raw PREPARE
   path, which has no local banks), falling back to a local prebuilt
   `text2cad/qa_bank/<bucket>/<id>/qa_bank.json` when the Hub file is absent. The

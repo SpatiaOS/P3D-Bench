@@ -25,6 +25,9 @@ Two text conditions per case, picked with `--text-mode`:
   single semantic Judge axis (QA-S + J-Sem).
 
 The model receives the text plus the format's system guidelines; no image.
+Generation and TextDesc J-Sem call the same condition resolver, so descriptive
+evaluation uses `metadata.text_desc` exactly as generation did (with the same
+documented parametric fallback when it is absent).
 
 > **Demo split note.** The in-repo **demo** split currently carries only the
 > parametric text. On the demo split `--text-mode descriptive` therefore selects
@@ -55,8 +58,9 @@ Part metrics need per-part geometry, so a fixed decomposition model
 (Claude Opus 4.6 in the paper, set in [`configs/judge.yaml`](../configs/judge.yaml))
 converts the stage-1 unified program into a parts-structured form via a single
 call — `Assembly3DTask.build_decompose_prompt`. **Anti-leak invariant:** the
-decomposition model sees only the stage-1 code (and optionally one render of its
-own union), never the GT part inventory, so part-name alignment stays honest. A
+formal decomposition model sees the stage-1 code and one aligned render of that
+same predicted union, never the GT part inventory or GT geometry, so part-name
+alignment stays honest. A
 decomposition that redesigns the geometry (fidelity CD > 5e-4 **and** IoU_V <
 0.95 vs the stage-1 union) excludes the case from Part means rather than scoring
 it wrongly.

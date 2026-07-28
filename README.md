@@ -205,6 +205,26 @@ p3dbench score     --compiled compiled.jsonl --metric topology           # → m
 p3dbench summarize --metrics metrics.jsonl                               # → summary.json
 ```
 
+For paper reproduction, pass
+`--protocol-id p3d-aaai27-paper-protocol-v1` to `score` or `run`. This
+fail-closed mode writes non-secret provider/request/model and prompt/image-hash
+provenance to per-case `evaluation_meta.json` sidecars; scientific values remain
+in `raw_metrics` (including the complete Judge JSON and QA answer/scoring rows).
+A formal `run` requires `--split full`, forbids `--limit`, and
+requires `--metric all`; `score` additionally checks the compiled IDs against
+the versioned dataset contract exactly: Text/Image/Assembly contain
+400/400/203 cases, respectively, with pinned source-UID order, release SHA,
+QA-source SHA, and frozen 12,800-question content digest. The contract is
+[`p3d-aaai27-paper-protocol-v1.json`](p3dbench/data/contracts/p3d-aaai27-paper-protocol-v1.json).
+Every compiled row's embedded condition, source ID and GT paths must exactly
+match its validated materialized manifest row.
+Formal Judge evidence is rendered with Blender clay only (four canonical
+768×768 views, 128 samples, seed 42); no OCC fallback is allowed.
+Transport/API/evaluator failures are recorded as gaps and block formal
+promotion; only an actual model-generation/compile-invalid outcome is
+worst-filled. Evaluation sidecar paths are archive-relative.
+Omitting the flag retains the ordinary diagnostic workflow.
+
 (Without `--out`, `infer` writes to `results/<run-id>/predictions.jsonl`; point `--pred` at
 that path instead.)
 

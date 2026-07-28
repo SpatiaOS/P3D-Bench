@@ -14,6 +14,7 @@ from pathlib import Path
 
 from . import FORMAT_SLUGS, METRIC_SLUGS, TASK_SLUGS, __version__
 from .config import DEFAULT_CONFIG_DIR, load_dotenv
+from .protocol import PAPER_PROTOCOL_ID
 from .utils import setup_logging
 
 RESULTS_DIR = Path("results")
@@ -66,7 +67,14 @@ def cmd_score(args) -> int:
     compiled = Path(args.compiled)
     out = Path(args.out) if args.out else compiled.with_name("metrics.jsonl")
     work = Path(args.work_dir) if args.work_dir else compiled.parent / "work"
-    score(compiled, args.metric, out=out, work_dir=work, config_dir=Path(args.config_dir))
+    score(
+        compiled,
+        args.metric,
+        out=out,
+        work_dir=work,
+        config_dir=Path(args.config_dir),
+        protocol_id=args.protocol_id,
+    )
     print(f"metrics -> {out}")
     return 0
 
@@ -82,7 +90,22 @@ def cmd_summarize(args) -> int:
 
 
 def cmd_run(args) -> int:
-    from .pipeline import compile_predictions, infer, score, summarize
+    from .pipeline import (
+        _formal_expected_case_ids,
+        compile_predictions,
+        infer,
+        score,
+        summarize,
+    )
+
+    if args.protocol_id == PAPER_PROTOCOL_ID:
+        if args.split != "full":
+            raise SystemExit("paper protocol requires --split full")
+        if args.limit is not None:
+            raise SystemExit("paper protocol forbids --limit truncation")
+        if args.metric != "all":
+            raise SystemExit("paper protocol requires --metric all")
+        _formal_expected_case_ids(args.task, args.split)
 
     run_dir = RESULTS_DIR / _run_id(args)
     paths = _stage_paths(run_dir)
@@ -97,7 +120,8 @@ def cmd_run(args) -> int:
         return 0
     compile_predictions(paths["predictions"], out=paths["compiled"], work_dir=paths["work"])
     score(paths["compiled"], args.metric, out=paths["metrics"],
-          work_dir=paths["work"], config_dir=Path(args.config_dir))
+          work_dir=paths["work"], config_dir=Path(args.config_dir),
+          protocol_id=args.protocol_id)
     summarize(paths["metrics"], out=paths["summary"])
     _print_summary(paths["summary"])
     return 0
@@ -151,8 +175,13 @@ def _print_summary(summary_path: Path) -> None:
     for g in data.get("groups", []):
         buckets = "  ".join(f"{b}={v:.3f}" for b, v in g["buckets"].items())
         score = "-" if g["score"] is None else f"{g['score']:.2f}"
+        valid = (
+            "-"
+            if g.get("valid_rate") is None
+            else f"{g['valid_rate']:.2f}"
+        )
         print(f"  [{g['task']}/{g['format']}] {g['model']}  "
-              f"valid={g['valid_rate']:.2f}  {buckets}  Score={score}")
+              f"valid={valid}  {buckets}  Score={score}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -193,6 +222,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--out")
     sp.add_argument("--work-dir")
     sp.add_argument("--config-dir", default=str(DEFAULT_CONFIG_DIR))
+    sp.add_argument(
+        "--protocol-id",
+        default=None,
+        choices=[PAPER_PROTOCOL_ID],
+        help="enable the frozen AAAI-27 paper protocol; omitted means diagnostic mode",
+    )
     sp.set_defaults(func=cmd_score)
 
     sp = sub.add_parser("summarize", help="metrics -> summary.json")
@@ -203,6 +238,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("run", help="chain infer -> compile -> score -> summarize")
     add_common_infer(sp)
     sp.add_argument("--metric", required=True, choices=[*METRIC_SLUGS, "all"])
+    sp.add_argument(
+        "--protocol-id",
+        default=None,
+        choices=[PAPER_PROTOCOL_ID],
+        help="enable the frozen AAAI-27 paper protocol; omitted means diagnostic mode",
+    )
     sp.set_defaults(func=cmd_run)
 
     sp = sub.add_parser("download", help="demo: check availability; full: download UIDs + materialize from --source-root")
