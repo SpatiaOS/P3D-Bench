@@ -685,7 +685,7 @@ def test_dataset_contract_matches_all_three_local_uid_releases():
         pytest.skip("local release fixture unavailable")
     contract = paper_dataset_contract()
     assert file_fingerprint(str(manifest))["sha256"] == (
-        contract["inventory_reference_sha256"]
+        contract["dataset_manifest_sha256"]
     )
     for task, token, expected in (
         ("text-to-3d", "text_to_3d", 400),
