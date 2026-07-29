@@ -19,18 +19,6 @@ was produced. Each format is one module under [`p3dbench/formats/`](../p3dbench/
 format's own language (or `python`/`javascript`/`scad`/`json`), falling back to
 the whole stripped response.
 
-## Prompt contract
-
-Format system guidelines are model-runtime generation guidance. The selected
-task supplies the visible case input separately; evaluator references, metrics,
-and ground truth are never appended to the model prompt. External self-evaluation
-clients may present these guidelines as an optional benchmark-aligned reference,
-while keeping their required artifact upload contract separate.
-
-OpenSCAD treats stated linear dimensions as millimeters without unit conversion
-or global rescaling. The minimal-JSON example is parsed in tests so documentation
-syntax cannot silently diverge from the compiler contract.
-
 ## minimal-json (Text2CAD construction history)
 
 Top-level `parts`, each with `coordinate_system` (Euler ZYX degrees + translation),

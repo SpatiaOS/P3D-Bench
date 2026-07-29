@@ -35,23 +35,6 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from ..protocol import (
-    PAPER_CANONICAL_VIEW_COUNT,
-    PAPER_QA_BANK_VERSION,
-    PAPER_RENDER_RESOLUTION,
-    PAPER_RENDER_SAMPLES,
-    PAPER_RENDER_SEED,
-    file_fingerprint,
-    normalize_frozen_qa_questions,
-    paper_dataset_contract,
-    paper_manifest_provenance,
-    paper_qa_source_contract,
-    paper_task_contract,
-    qa_dataset_content_sha256,
-    qa_questions_content_sha256,
-    validate_paper_source_ids,
-)
-
 logger = logging.getLogger(__name__)
 
 HF_REPO_ID = "SpatiaOS/P3D-Bench"
@@ -82,32 +65,12 @@ _HF_DIR = {"text-to-3d": "text_to_3d", "image-to-3d": "image_to_3d", "assembly-3
 def _hf_download(rel_path: str, token: Optional[str]):
     from huggingface_hub import hf_hub_download
 
-    return hf_hub_download(
-        HF_REPO_ID,
-        rel_path,
-        repo_type="dataset",
-        revision=paper_dataset_contract()["dataset_revision"],
-        token=token,
-    )
+    return hf_hub_download(HF_REPO_ID, rel_path, repo_type="dataset", token=token)
 
 
 def load_hf_uids(task: str, token: Optional[str] = None) -> list[str]:
     path = _hf_download(f"data/{_HF_DIR[task]}/uids.jsonl", token)
-    fingerprint = file_fingerprint(str(path))
-    task_contract = paper_task_contract(task)
-    if fingerprint["sha256"] != task_contract["uids_sha256"]:
-        raise ValueError(
-            f"Pinned {task} UID source SHA mismatch: "
-            f"expected {task_contract['uids_sha256']}, "
-            f"got {fingerprint['sha256']}"
-        )
-    uids = [
-        json.loads(line)["uid"]
-        for line in Path(path).read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    validate_paper_source_ids(task, uids)
-    return uids
+    return [json.loads(l)["uid"] for l in Path(path).read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
 def load_hf_annotations(task: str, token: Optional[str] = None) -> dict[str, dict]:
@@ -135,41 +98,13 @@ def load_hf_qa(token: Optional[str] = None) -> dict[str, list]:
     except Exception as exc:
         logger.info("no Hub QA banks (%s); falling back to source-root qa_bank/", exc)
         return {}
-    fingerprint = file_fingerprint(str(path))
-    qa_contract = paper_dataset_contract()["qa"]
-    if fingerprint["sha256"] != qa_contract["source_sha256"]:
-        raise ValueError(
-            "Pinned QA source SHA mismatch: "
-            f"expected {qa_contract['source_sha256']}, "
-            f"got {fingerprint['sha256']}"
-        )
-    rows: list[dict] = []
+    out: dict[str, list] = {}
     for line in Path(path).read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         row = json.loads(line)
-        rows.append(row)
-    validate_paper_source_ids(
-        "text-to-3d",
-        [str(row.get("uid") or "") for row in rows],
-    )
-    question_count = sum(len(row.get("questions") or []) for row in rows)
-    if question_count != int(qa_contract["question_count"]):
-        raise ValueError(
-            "Pinned QA question count mismatch: "
-            f"expected {qa_contract['question_count']}, got {question_count}"
-        )
-    content_sha = qa_dataset_content_sha256(rows)
-    if content_sha != qa_contract["normalized_content_sha256"]:
-        raise ValueError(
-            "Pinned normalized QA dataset digest mismatch: "
-            f"expected {qa_contract['normalized_content_sha256']}, "
-            f"got {content_sha}"
-        )
-    out: dict[str, list] = {}
-    for row in rows:
         if row.get("uid") and row.get("questions"):
-            out[str(row["uid"])] = list(row["questions"])
+            out[row["uid"]] = row["questions"]
     return out
 
 
@@ -234,108 +169,6 @@ def _done(paths: list[Path], overwrite: bool) -> bool:
     return (not overwrite) and all(p.exists() for p in paths)
 
 
-def _image_size(path: Path) -> tuple[int, int]:
-    from PIL import Image
-
-    with Image.open(path) as image:
-        return image.size
-
-
-def _materialize_text_gt_renders(
-    mesh_path: Path,
-    case_id: str,
-    *,
-    overwrite: bool,
-) -> tuple[list[str], Optional[dict], Optional[str]]:
-    """Materialize the frozen four-view Blender-clay GT evidence."""
-    relative_paths = [
-        f"targets/renders/{case_id}/view_{index:03d}.png"
-        for index in range(PAPER_CANONICAL_VIEW_COUNT)
-    ]
-    output_paths = [FULL_ROOT / relative for relative in relative_paths]
-    contract_path = (
-        FULL_ROOT / "targets" / "renders" / case_id / "render_contract.json"
-    )
-    mesh_sha = file_fingerprint(str(mesh_path))["sha256"]
-    existing = _read_json(contract_path)
-    fixed_profile = {
-        "renderer": "blender_clay",
-        "view_count": PAPER_CANONICAL_VIEW_COUNT,
-        "resolution": PAPER_RENDER_RESOLUTION,
-        "samples": PAPER_RENDER_SAMPLES,
-        "seed": PAPER_RENDER_SEED,
-        "source_mesh_sha256": mesh_sha,
-    }
-    if not overwrite and existing:
-        expected_files = existing.get("views") or []
-        if (
-            all(existing.get(key) == value for key, value in fixed_profile.items())
-            and len(expected_files) == PAPER_CANONICAL_VIEW_COUNT
-            and all(path.is_file() for path in output_paths)
-            and all(
-                _image_size(path) == (
-                    PAPER_RENDER_RESOLUTION,
-                    PAPER_RENDER_RESOLUTION,
-                )
-                for path in output_paths
-            )
-            and all(
-                expected_files[index].get("sha256")
-                == file_fingerprint(str(path))["sha256"]
-                for index, path in enumerate(output_paths)
-            )
-        ):
-            return relative_paths, existing, None
-
-    from ..render import blender
-
-    with tempfile.TemporaryDirectory(prefix="p3d_text_gt_render_") as tmp:
-        rendered = blender.render_multiview(
-            str(mesh_path),
-            tmp,
-            n_views=PAPER_CANONICAL_VIEW_COUNT,
-            resolution=PAPER_RENDER_RESOLUTION,
-            samples=PAPER_RENDER_SAMPLES,
-            seed=PAPER_RENDER_SEED,
-        )
-        rendered_paths = [Path(path) for path in rendered or []]
-        if (
-            len(rendered_paths) != PAPER_CANONICAL_VIEW_COUNT
-            or not all(path.is_file() for path in rendered_paths)
-        ):
-            return [], None, (
-                "GT Blender-clay render gap: expected exactly "
-                f"{PAPER_CANONICAL_VIEW_COUNT} views"
-            )
-        if any(
-            _image_size(path) != (
-                PAPER_RENDER_RESOLUTION,
-                PAPER_RENDER_RESOLUTION,
-            )
-            for path in rendered_paths
-        ):
-            return [], None, "GT Blender-clay render gap: wrong resolution"
-        for source, destination in zip(rendered_paths, output_paths):
-            _copy(source, destination)
-
-    render_contract = {
-        **fixed_profile,
-        "views": [
-            {
-                "path": relative,
-                "sha256": file_fingerprint(str(path))["sha256"],
-            }
-            for relative, path in zip(relative_paths, output_paths)
-        ],
-    }
-    contract_path.parent.mkdir(parents=True, exist_ok=True)
-    contract_path.write_text(
-        json.dumps(render_contract, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    return relative_paths, render_contract, None
-
-
 # --------------------------------------------------------------------------
 # per-task builders
 # --------------------------------------------------------------------------
@@ -372,10 +205,7 @@ def build_image(uids, source_root, annotations, *, max_edge, overwrite, limit):
                 "license_group": "fusion360-gallery",
                 "semantic_category": decision.get("semantic_category"),
                 "difficulty_raw": decision.get("complexity"),
-                "difficulty": _fusion_difficulty(decision.get("complexity")),
-                "paper_dataset_contract": paper_manifest_provenance(
-                    "image-to-3d"
-                )}
+                "difficulty": _fusion_difficulty(decision.get("complexity"))}
         rows.append({
             "id": cid, "task": "image-to-3d", "split": "full",
             "input": {"text": "", "image_paths": [f"inputs/{cid}/view_000.png"], "part_annotations": []},
@@ -447,10 +277,7 @@ def build_assembly(uids, source_root, annotations, *, max_edge, overwrite, limit
                 "n_parts": len(part_paths), "instance_count": a.get("instance_count"),
                 "unique_part_count": a.get("unique_part_count"),
                 "difficulty_raw": decision.get("complexity"),
-                "difficulty": _fusion_difficulty(decision.get("complexity")),
-                "paper_dataset_contract": paper_manifest_provenance(
-                    "assembly-3d"
-                )}
+                "difficulty": _fusion_difficulty(decision.get("complexity"))}
         rows.append({
             "id": cid, "task": "assembly-3d", "split": "full",
             "input": {"text": cond.read_text(encoding="utf-8").strip(),
@@ -509,26 +336,15 @@ def build_text(uids, source_root, annotations, *, max_edge, overwrite, limit, qa
                 skipped.append((uid, "GT minimal-json failed to compile"))
                 continue
 
-        # TextDesc J-Sem requires four same-view GT Blender-clay renders.
-        try:
-            renders, gt_render_contract, render_error = (
-                _materialize_text_gt_renders(
-                    mesh_dst,
-                    cid,
-                    overwrite=overwrite,
-                )
-            )
-        except Exception as exc:
-            renders, gt_render_contract = [], None
-            render_error = (
-                "GT Blender-clay render gap: "
-                f"{type(exc).__name__}: {exc}"
-            )
-        if render_error:
-            skipped.append((uid, render_error))
-
-        # QA bank.
-        qa_rel = None
+        # Optional GT assets if cached locally (renders / QA bank).
+        renders, qa_rel = [], None
+        cache = t2c / "_shared_cache" / f"{bucket}__{fid}"
+        occ = cache / "renders/occ/single_view/gt_render.png"
+        if occ.exists():
+            rel = f"targets/renders/{cid}/view_000.png"
+            _copy_image(occ, FULL_ROOT / rel, max_edge)
+            _copy_image(occ, FULL_ROOT / "inputs" / cid / "view_000.png", max_edge)
+            renders.append(rel)
         # QA bank (Text-to-3D Judge): prefer the Hub qa.jsonl (all text_mode×
         # format variants), fall back to a local prebuilt bank under the source
         # root. The from-raw PREPARE path has no local qa_bank/, so the Hub is
@@ -544,12 +360,7 @@ def build_text(uids, source_root, annotations, *, max_edge, overwrite, limit, qa
                 _copy(qa_src, FULL_ROOT / qa_rel)
 
         meta = {"source": "text2cad-v1.1", "source_id": uid, "license_group": "cc-by-nc-sa-4.0",
-                "summary": ann.get("summary"), "text_desc": (ann.get("text_desc") or "").strip() or None,
-                "paper_gt_render_contract": gt_render_contract,
-                "paper_gt_render_error": render_error,
-                "paper_dataset_contract": paper_manifest_provenance(
-                    "text-to-3d"
-                )}
+                "summary": ann.get("summary"), "text_desc": (ann.get("text_desc") or "").strip() or None}
         rows.append({
             "id": cid, "task": "text-to-3d", "split": "full",
             "input": {"text": text_param, "image_paths": [], "part_annotations": []},
@@ -572,30 +383,21 @@ def _read_json(path: Path):
 
 
 def _write_qa_bank(uid: str, questions: list, dst: Path, overwrite: bool) -> None:
-    """Write a frozen Hub QA bank with explicit split/source provenance.
+    """Write a Hub QA bank to the evaluator layout, filling ``split`` from the qid.
 
-    The source questions carry ``text_mode``/``format`` but omit ``split`` and
-    ``source_text_level``. Those are deterministic packaging fields:
-    semantic -> ``detailed`` and param -> ``parametric_detail``.
+    The Hub questions carry ``text_mode``/``format`` (so the judge can pick the
+    active run's variant) but not ``split``; derive it from the qid prefix so the
+    scorer can separate semantic (QA-S) from param (QA-P) accuracy.
     """
-    norm = normalize_frozen_qa_questions(questions)
-    source_contract = paper_qa_source_contract()
-    payload = {
-        "uid": uid,
-        "qa_bank_version": PAPER_QA_BANK_VERSION,
-        "source_contract": source_contract,
-        "dataset_content_sha256": source_contract[
-            "normalized_content_sha256"
-        ],
-        "content_sha256": qa_questions_content_sha256(norm),
-        "questions": norm,
-    }
-    if not overwrite and dst.exists() and _read_json(dst) == payload:
+    if _done([dst], overwrite):
         return
+    norm = []
+    for q in questions:
+        q = dict(q)
+        q.setdefault("split", "param" if str(q.get("qid", "")).startswith("param") else "semantic")
+        norm.append(q)
     dst.parent.mkdir(parents=True, exist_ok=True)
-    # The Hub artifact is the frozen v9 bank used by the paper.  This builder
-    # only normalizes packaging fields; it never generates or rewrites questions.
-    dst.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+    dst.write_text(json.dumps({"uid": uid, "questions": norm}, ensure_ascii=False, indent=2),
                    encoding="utf-8")
 
 

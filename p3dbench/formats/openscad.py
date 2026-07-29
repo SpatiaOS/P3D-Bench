@@ -79,7 +79,7 @@ Generate clean, well-documented OpenSCAD code that:
 - Ensure all 2D profiles used with linear_extrude/rotate_extrude are valid closed shapes
 - Use difference() for subtractive operations (holes, cuts, slots)
 - Use union() to combine multiple solid bodies
-- Treat all stated linear dimensions as millimeters, without unit conversion or global rescaling.
+- Keep dimensions in millimeters for consistency
 
 Example structure:
 ```scad

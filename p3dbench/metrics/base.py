@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-import math
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -28,7 +27,6 @@ class ScoreContext:
     work_dir: Path
     judge_client: Any = None          # models.ModelClient or None
     decompose_client: Any = None      # models.ModelClient or None
-    protocol_id: Optional[str] = None
     # Cross-bucket cache (e.g. geometry stores align_transform_4x4 for part metric).
     shared: dict = field(default_factory=dict)
 
@@ -104,28 +102,6 @@ ALL_BUCKETS = ("valid", "geometry", "topology", "judge", "part")
 # Buckets that contribute to the headline Score (Valid reported alongside, excluded).
 SCORE_BUCKETS = ("geometry", "topology", "judge", "part")
 
-PART_PROTOCOL_STATUS_KEY = "part_protocol_status"
-PART_STATUS_MEASURED = "measured"
-PART_STATUS_GENERATION_INVALID = "generation_invalid"
-PART_STATUS_DECOMPOSITION_UNUSABLE = "decomposition_unusable"
-PART_STATUS_FIDELITY_REJECTED = "fidelity_rejected"
-PART_STATUS_FIDELITY_UNAVAILABLE = "fidelity_unavailable"
-PART_STATUS_EVALUATOR_GAP = "evaluator_gap"
-PART_STATUS_UNCLASSIFIED_MISSING = "unclassified_missing"
-PART_WORST_FILL_STATUSES = frozenset({
-    PART_STATUS_DECOMPOSITION_UNUSABLE,
-    PART_STATUS_FIDELITY_REJECTED,
-})
-PART_PROTOCOL_STATUSES = frozenset({
-    PART_STATUS_MEASURED,
-    PART_STATUS_GENERATION_INVALID,
-    PART_STATUS_DECOMPOSITION_UNUSABLE,
-    PART_STATUS_FIDELITY_REJECTED,
-    PART_STATUS_FIDELITY_UNAVAILABLE,
-    PART_STATUS_EVALUATOR_GAP,
-    PART_STATUS_UNCLASSIFIED_MISSING,
-})
-
 
 # --------------------------------------------------------------------------
 # Task/format-conditioned bucket membership (which sub-metrics apply)
@@ -170,160 +146,43 @@ def normalize_value(key: str, value: Optional[float]) -> Optional[float]:
         return None
 
 
-def part_required_status(raw_metrics: dict[str, Any]) -> str:
-    """Return the closed Part-denominator status for a formal result row.
-
-    New evaluator rows carry an explicit status. Legacy rows with both required
-    Part metrics remain measurable; a legacy omission without classification is
-    deliberately fail-closed.
-    """
-    status = raw_metrics.get(PART_PROTOCOL_STATUS_KEY)
-    if status in PART_PROTOCOL_STATUSES:
-        if (
-            status in PART_WORST_FILL_STATUSES
-            and not str(raw_metrics.get("part_note") or "").strip()
-        ):
-            return PART_STATUS_UNCLASSIFIED_MISSING
-        return str(status)
-    if all(
-        normalize_value(key, raw_metrics.get(key)) is not None
-        for key in ("part_match_f1", "part_fs")
-    ):
-        return PART_STATUS_MEASURED
-    return PART_STATUS_UNCLASSIFIED_MISSING
-
-
-def iou_applicability(
-    raw_metrics: dict[str, Any],
-    valid: bool,
-) -> Optional[bool]:
-    """Return whether IoU applies to this case under the paper NoOE gate.
-
-    Invalid predictions are worst-filled before applicability is consulted.
-    For a valid prediction, IoU is eligible only when both the prediction and
-    GT raw open-edge ratios are finite and exactly zero.  A non-zero ratio
-    makes IoU inapplicable; absent/non-finite topology evidence is an evaluator
-    gap, represented by ``None``.
-    """
-    if not valid:
-        return True
-    ratios = (
-        raw_metrics.get("pred_open_edge_ratio"),
-        raw_metrics.get("gt_open_edge_ratio"),
-    )
-    has_unknown = False
-    for value in ratios:
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            has_unknown = True
-            continue
-        value = float(value)
-        if not math.isfinite(value) or value < 0.0:
-            has_unknown = True
-            continue
-        if value > 0.0:
-            return False
-    return None if has_unknown else True
-
-
 def bucket_score_for_case(
     task: str,
     raw_metrics: dict[str, Any],
     valid: bool,
     text_mode: str = "parametric",
-    required_buckets: Optional[set[str]] = None,
 ) -> dict[str, Optional[float]]:
     """Normalized per-bucket score for ONE case.
 
     Worst-fill: a case failing the Valid gate contributes 0.0 for every member
-    sub-metric (worst value -> normalized 0). In ordinary diagnostic mode
-    (``required_buckets=None``), unmeasured sub-metrics retain the legacy
-    drop-from-mean behavior. In a formal run, a valid case missing any required
-    applicable sub-metric returns ``None`` for that bucket: this is an
-    evaluator gap and must not be hidden by averaging the remaining
-    sub-metrics. IoU is omitted from a valid case's geometry denominator when
-    either raw PRED or GT open-edge ratio is non-zero.
+    sub-metric (worst value -> normalized 0). A member sub-metric that is simply
+    not measured for a valid case (e.g. IoU skipped because the mesh is open) is
+    dropped from that bucket's mean rather than zero-filled.
+
+    One bucket is not an equal-weight mean: parametric Text-to-3D's Judge is the
+    question-level micro-average over the QA bank (4 QA-S + 8 QA-P questions),
+    i.e. ``(QA-S + 2*QA-P)/3`` — the same quantity the research runner reports as
+    ``qa_overall_accuracy``. Averaging the two split accuracies instead would
+    silently give a 4-question split the same weight as an 8-question one.
     """
     membership = bucket_membership(task, text_mode)
     out: dict[str, Optional[float]] = {}
     for bucket, keys in membership.items():
-        if required_buckets is not None and bucket not in required_buckets:
-            continue
-        if valid and required_buckets is not None and bucket == "part":
-            status = part_required_status(raw_metrics)
-            if status in PART_WORST_FILL_STATUSES:
-                out[bucket] = 0.0
-                continue
-            if status != PART_STATUS_MEASURED:
-                out[bucket] = None
-                continue
         vals: list[float] = []
         for key in keys:
             if not valid:
                 vals.append(0.0)
                 continue
-            if key == "iou":
-                applicable = iou_applicability(raw_metrics, valid)
-                if applicable is False:
-                    continue
-                if applicable is None:
-                    if required_buckets is not None:
-                        vals = []
-                        break
-                    continue
             nv = normalize_value(key, raw_metrics.get(key))
-            if nv is None:
-                if required_buckets is not None:
-                    vals = []
-                    break
-                continue
-            vals.append(nv)
+            if nv is not None:
+                vals.append(nv)
         if (
             task == "text-to-3d"
             and text_mode == "parametric"
             and bucket == "judge"
-            and len(vals) == 2
+            and len(vals) == 2  # membership order is (qa_semantic, qa_param)
         ):
-            # QA-S has four questions and QA-P has eight questions per case.
-            # The paper Judge cell is their question-level micro-average.
             out[bucket] = (vals[0] + 2.0 * vals[1]) / 3.0
         else:
             out[bucket] = (sum(vals) / len(vals)) if vals else None
     return out
-
-
-def missing_required_metrics(
-    task: str,
-    raw_metrics: dict[str, Any],
-    valid: bool,
-    text_mode: str = "parametric",
-    required_buckets: Optional[set[str]] = None,
-) -> dict[str, list[str]]:
-    """Return missing applicable required sub-metrics for a valid prediction."""
-    if not valid:
-        return {}
-    membership = bucket_membership(task, text_mode)
-    gaps: dict[str, list[str]] = {}
-    for bucket, keys in membership.items():
-        if required_buckets is not None and bucket not in required_buckets:
-            continue
-        if required_buckets is not None and bucket == "part":
-            status = part_required_status(raw_metrics)
-            if status in PART_WORST_FILL_STATUSES:
-                continue
-            if status != PART_STATUS_MEASURED:
-                gaps[bucket] = [f"{PART_PROTOCOL_STATUS_KEY}:{status}"]
-                continue
-        missing = []
-        for key in keys:
-            if key == "iou":
-                applicable = iou_applicability(raw_metrics, valid)
-                if applicable is False:
-                    continue
-                if applicable is None:
-                    missing.append("iou_applicability")
-                    continue
-            if normalize_value(key, raw_metrics.get(key)) is None:
-                missing.append(key)
-        if missing:
-            gaps[bucket] = missing
-    return gaps

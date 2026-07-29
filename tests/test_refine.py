@@ -169,7 +169,6 @@ def test_refine_recovers_on_feedback():
     assert row["error"] is None
     assert row["attempts"] == 2
     assert "GOOD" in row["code"]
-    assert row["failure_class"] is None
     # second call must include the fed-back error + previous code
     assert "failed to compile" in fc.prompts[1]
     assert "BAD 1" in fc.prompts[1]
@@ -183,7 +182,6 @@ def test_refine_exhausts_all_invalid():
     assert row["error"] is not None
     assert row["attempts"] == 3
     assert len(fc.prompts) == 3
-    assert row["failure_class"] == P.FAILURE_GENERATION_INVALID
 
 
 def test_refine_escalates_on_repeated_error():
@@ -200,7 +198,6 @@ def test_refine_empty_extraction_stops_immediately():
     row = {"id": "c"}
     P._infer_with_refine(fc, FakeFormat(), Bundle(), row, max_attempts=3)
     assert row["error"] == "empty code extraction"
-    assert row["failure_class"] == P.FAILURE_GENERATION_INVALID
     assert len(fc.prompts) == 1               # no wasted retries
 
 
@@ -218,7 +215,6 @@ def test_refine_llm_failure_stops_immediately():
     P._infer_with_refine(bc, FakeFormat(), Bundle(), row, max_attempts=3)
     assert "api exploded" in row["error"]
     assert bc.n == 1                          # LLM-side failure: no feedback retry
-    assert row["failure_class"] == P.FAILURE_INFERENCE_GAP
 
 
 def test_refine_usage_accumulates():
@@ -235,7 +231,6 @@ def test_single_shot_path_sets_no_attempt_history():
     row = {"id": "c", "raw_text": None, "code": None, "usage": {}, "error": None}
     P._infer_single_shot(fc, FakeFormat(), Bundle(), row)
     assert row["error"] is None
-    assert row["failure_class"] is None
     assert "GOOD" in row["code"]
     assert "attempt_history" not in row      # single-shot carries no refine record
 
