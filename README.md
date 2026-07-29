@@ -15,9 +15,9 @@
 
 <sub>† Equal contribution &nbsp;·&nbsp; ‡ Corresponding author</sub>
 
-<img src="assets/teaser.png" width="100%" alt="Per-task model scores across Text-to-3D, Image-to-3D, and Assembly-3D."/>
+<img src="assets/fig_tasks_grouped_bars.svg" width="100%" alt="Per-task model scores across Text-to-3D, Image-to-3D, and Assembly-3D."/>
 
-<sub><b>Scores of different models across the three tasks in P3D-Bench.</b> The Score is the average of the four bucket scores (Geometry, Topology, Judge, Part), rescaled to 0–100.</sub>
+<sub><b>Scores of different models across the three tasks in P3D-Bench.</b> Each task score averages its applicable metric buckets and is rescaled to 0–100.</sub>
 
 </div>
 
@@ -220,6 +220,11 @@ Every compiled row's embedded condition, source ID and GT paths must exactly
 match its validated materialized manifest row.
 Formal Judge evidence is rendered with Blender clay only (four canonical
 768×768 views, 128 samples, seed 42); no OCC fallback is allowed.
+For descriptive Text-to-3D, the Judge receives the original text plus four
+paired prediction/GT views and reports semantic alignment only. Parametric
+Text-to-3D combines four QA-S and eight QA-P questions as
+`(QA-S + 2 × QA-P) / 3`. Formal aggregates use the fixed task denominator;
+missing or evaluator-gap contributions are zero rather than being dropped.
 Transport/API/evaluator failures are recorded as gaps and block formal
 promotion; only an actual model-generation/compile-invalid outcome is
 worst-filled. Evaluation sidecar paths are archive-relative.
