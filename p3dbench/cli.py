@@ -151,8 +151,14 @@ def _print_summary(summary_path: Path) -> None:
     for g in data.get("groups", []):
         buckets = "  ".join(f"{b}={v:.3f}" for b, v in g["buckets"].items())
         score = "-" if g["score"] is None else f"{g['score']:.2f}"
+        valid = "-" if g.get("valid_rate") is None else f"{g['valid_rate']:.2f}"
+        # Untested cases (the API never answered) are excluded everywhere, so
+        # surface the count — an unnoticed 40% llm_fail makes the Score
+        # meaningless.
+        n_fail = g.get("llm_fail_cases") or 0
+        fail = f"  llm_fail={n_fail}/{g.get('n_cases', 0)}" if n_fail else ""
         print(f"  [{g['task']}/{g['format']}] {g['model']}  "
-              f"valid={g['valid_rate']:.2f}  {buckets}  Score={score}")
+              f"valid={valid}{fail}  {buckets}  Score={score}")
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -92,6 +92,10 @@ def infer(
             "code": None,
             "usage": {},
             "error": None,
+            # True only when the API never returned a usable response: the case
+            # counts as untested (dropped from every metric and from the Valid
+            # denominator), not as a model failure.
+            "llm_failed": False,
         }
         if dry_run:
             rows.append(row)
@@ -116,9 +120,12 @@ def _infer_single_shot(client, fmt_obj, bundle, row: dict) -> None:
         row["code"] = fmt_obj.extract_code(resp.text)
         row["usage"] = resp.usage
         if not row["code"].strip():
+            # The model answered, just not with usable code: that is a model
+            # failure (valid=False, worst-filled), not an untested case.
             row["error"] = "empty code extraction"
-    except Exception as exc:  # a failed call is just an error state
+    except Exception as exc:  # the call itself failed -> untested
         row["error"] = f"{type(exc).__name__}: {exc}"
+        row["llm_failed"] = True
         logger.warning("infer failed for %s: %s", row["id"], exc)
 
 
@@ -129,8 +136,10 @@ def _infer_with_refine(client, fmt_obj, bundle, row: dict, *, max_attempts: int)
     on an invalid compile, feed the error back and regenerate, up to
     ``max_attempts``. An LLM-side failure (call raised, or empty extraction) or an
     export-timeout-only failure stops the loop early — error feedback would be
-    useless there. The intermediate compiles run in a temp dir purely to drive the
-    loop; the authoritative artifacts are produced later by the ``compile`` stage.
+    useless there. ``row["llm_failed"]`` is set only when no attempt ever returned
+    a response, so a model that answered with uncompilable code is still scored.
+    The intermediate compiles run in a temp dir purely to drive the loop; the
+    authoritative artifacts are produced later by the ``compile`` stage.
     """
     user_prompt = bundle.user
     history: list[dict] = []
@@ -138,6 +147,7 @@ def _infer_with_refine(client, fmt_obj, bundle, row: dict, *, max_attempts: int)
     code = ""
     last_error: Optional[str] = None
     valid = False
+    responded = False
 
     with tempfile.TemporaryDirectory(prefix="p3d_refine_") as td:
         td = Path(td)
@@ -152,13 +162,16 @@ def _infer_with_refine(client, fmt_obj, bundle, row: dict, *, max_attempts: int)
                                 "llm_failed": True, "error_stage": "llm_generate"})
                 break  # LLM-side failure: stop (feedback can't help)
 
+            responded = True
             row["raw_text"] = resp.text
             _merge_usage(total_usage, resp.usage)
             code = fmt_obj.extract_code(resp.text)
             if not code.strip():
+                # Answered but unparseable: a model failure, not an API failure.
                 last_error = "empty code extraction"
                 history.append({"attempt": attempt, "valid": False, "errors": [last_error],
-                                "llm_failed": True, "error_stage": "llm_extract"})
+                                "llm_failed": False, "api_parse_failed": True,
+                                "error_stage": "llm_extract"})
                 break  # no code to feed back
 
             cr = fmt_obj.compile(code, td / f"attempt_{attempt}")
@@ -191,6 +204,7 @@ def _infer_with_refine(client, fmt_obj, bundle, row: dict, *, max_attempts: int)
     row["code"] = code
     row["usage"] = total_usage
     row["error"] = None if valid else last_error
+    row["llm_failed"] = not valid and not responded
     row["attempts"] = len(history)
     row["attempt_history"] = history
 
@@ -362,13 +376,19 @@ def score(
             shared={"stage1_code": row.get("code"), "text_mode": row.get("text_mode", "parametric")},
         )
         raw_metrics: dict = {}
-        for bucket_name in buckets:
-            try:
-                bucket = get_metric_bucket(bucket_name)
-                raw_metrics.update(bucket.score(ctx) or {})
-            except Exception as exc:
-                logger.warning("score bucket %s failed for %s: %s", bucket_name, row["id"], exc)
-                raw_metrics[f"_{bucket_name}_error"] = f"{type(exc).__name__}: {exc}"
+        llm_failed = bool(row.get("llm_failed"))
+        if llm_failed:
+            # Untested: there is no model output to measure. summarize() drops
+            # the case rather than scoring it.
+            logger.info("score: skipping %s (llm_failed)", row["id"])
+        else:
+            for bucket_name in buckets:
+                try:
+                    bucket = get_metric_bucket(bucket_name)
+                    raw_metrics.update(bucket.score(ctx) or {})
+                except Exception as exc:
+                    logger.warning("score bucket %s failed for %s: %s", bucket_name, row["id"], exc)
+                    raw_metrics[f"_{bucket_name}_error"] = f"{type(exc).__name__}: {exc}"
         rows.append(
             {
                 "id": row["id"],
@@ -378,6 +398,7 @@ def score(
                 "split": row["split"],
                 "text_mode": row.get("text_mode", "parametric"),
                 "valid": bool(row.get("valid")),
+                "llm_failed": llm_failed,
                 "buckets": buckets,
                 "raw_metrics": raw_metrics,
             }
@@ -400,9 +421,16 @@ def summarize(metrics_path: Path, *, out: Path) -> Path:
     summary = {"groups": []}
     for (task, fmt, model), grp in groups.items():
         n = len(grp)
-        n_valid = sum(1 for r in grp if r["valid"])
+        # An LLM API failure means the case was never tested: it is dropped from
+        # every metric AND from the Valid denominator, and reported on its own as
+        # llm_fail_rate. A model that *answered* with unusable code is a
+        # different thing — that stays valid=False and gets worst-filled.
+        tested = [r for r in grp if not r.get("llm_failed")]
+        n_llm_fail = n - len(tested)
+        n_tested = len(tested)
+        n_valid = sum(1 for r in tested if r["valid"])
         bucket_sums: dict[str, list[float]] = defaultdict(list)
-        for r in grp:
+        for r in tested:
             per_bucket = bucket_score_for_case(
                 task, r["raw_metrics"], r["valid"], r.get("text_mode", "parametric")
             )
@@ -418,7 +446,10 @@ def summarize(metrics_path: Path, *, out: Path) -> Path:
                 "format": fmt,
                 "model": model,
                 "n_cases": n,
-                "valid_rate": n_valid / n if n else 0.0,
+                "n_tested": n_tested,
+                "llm_fail_cases": n_llm_fail,
+                "llm_fail_rate": round(n_llm_fail / n, 4) if n else 0.0,
+                "valid_rate": (n_valid / n_tested) if n_tested else None,
                 "buckets": {b: round(v, 4) for b, v in bucket_means.items()},
                 "score": round(headline, 2) if headline is not None else None,
             }

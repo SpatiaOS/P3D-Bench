@@ -100,6 +100,12 @@ A case whose decomposition fails the fidelity gate (CD > 5e-4 **and** IoU_V <
    over the bank's 4 QA-S + 8 QA-P questions, i.e. `(QA-S + 2·QA-P)/3`, so the
    4-question split does not outweigh the 8-question one.
 3. Invalid predictions are worst-filled (normalized 0) for every member sub-metric.
+   A case whose **API call never returned** (`llm_failed`) is a different thing: it
+   was never tested, so it is dropped from every metric *and* from the Valid
+   denominator, and reported on its own as `llm_fail_cases` / `llm_fail_rate`.
+   A model that answered with unusable or uncompilable code is a model failure and
+   stays worst-filled. Re-run the failed cases before quoting a Score — a high
+   `llm_fail_rate` means the Score covers a smaller, self-selected subset.
 4. **Score** (the headline figure) = mean of the non-Valid buckets, ×100, averaged
    over a task's supported formats. Valid is reported alongside, never folded in.
 
