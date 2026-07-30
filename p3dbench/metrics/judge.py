@@ -9,14 +9,15 @@ Two evaluation modes, picked from ``ctx.task`` inside :class:`_JudgeBucket`:
   have exactly 4 views, the judge is skipped (all judge keys -> ``None``) rather
   than run partially — a partial set would silently mis-pair viewpoints.
 
-* **QA** (text-to-3d): a frozen v9 MCQ bank ships with each case. The Hub bank
+* **QA** (text-to-3d): a fixed MCQ bank ships with each case. The Hub bank
   (``data/text_to_3d/qa.jsonl``) packs every text_mode×format variant; the
   eval-time path selects the active run's variant via
   :func:`select_bank_questions` — 12 questions (4 semantic + 8 param) in
-  parametric mode, 4 semantic-only in descriptive mode. The predicted source,
-  measured bounding box, and exactly 4 canonical predicted renders are handed
-  to the answerer (an "option E / none-of-the-above" is appended at answer time
-  only). Accuracy over the semantic and param splits gives QA-S / QA-P.
+  parametric mode, 4 semantic-only in descriptive mode. The predicted source, its
+  measured bounding box and the same 4 canonical predicted renders the visual
+  judge uses are handed to the answerer (an "option E / none-of-the-above" is
+  appended at answer time only). Accuracy over the semantic and param splits
+  gives QA-S / QA-P.
 
 The judge / answerer / scoring algorithms, prompts, rubrics, thresholds and the
 JSON parser are reproduced verbatim from the research evaluation code. All
@@ -36,19 +37,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from ..protocol import (
-    PAPER_CANONICAL_VIEW_COUNT,
-    PAPER_PROTOCOL_ID,
-    PAPER_QA_BANK_VERSION,
-    PAPER_RENDER_RESOLUTION,
-    PAPER_RENDER_SAMPLES,
-    PAPER_RENDER_SEED,
-    append_call_trace,
-    file_fingerprint,
-    model_call_trace,
-    sha256_text,
-    validate_materialized_qa_bank_contract,
-)
 from ..text_condition import resolve_text_condition
 from .base import MetricBucket, ScoreContext
 
@@ -107,34 +95,16 @@ def extract_json_object(text: str) -> Optional[dict]:
 
 
 def _generate_text(client, prompt: str, *, images=None, system=None,
-                   temperature=None, max_tokens=None, timeout=None,
-                   trace_kind: Optional[str] = None,
-                   trace_out: Optional[dict] = None) -> str:
+                   temperature=None, max_tokens=None, timeout=None) -> str:
     """Call a :class:`p3dbench.models.ModelClient` and return its response text."""
-    image_list = list(images) if images else []
     resp = client.generate(
         prompt,
-        images=image_list or None,
+        images=list(images) if images else None,
         system=system,
         temperature=temperature,
         max_tokens=max_tokens,
         timeout=timeout,
     )
-    if trace_out is not None and trace_kind:
-        trace_out.update(model_call_trace(
-            kind=trace_kind,
-            client=client,
-            response=resp,
-            prompt=prompt,
-            images=image_list,
-            system=system,
-            request_overrides={
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-                "timeout_s": timeout,
-                "image_count": len(image_list),
-            },
-        ))
     return getattr(resp, "text", "") or ""
 
 
@@ -144,37 +114,12 @@ def _generate_text(client, prompt: str, *, images=None, system=None,
 def judge_default_result(error: Optional[str] = None) -> dict:
     """Schema returned by :func:`llm_judge_score` (also used when skipping)."""
     return {
-        "geometry": None,
+        "geometry": 0,
         "semantic": None,
-        "aesthetics": None,
+        "aesthetics": 0,
         "reason": "",
         "error": error,
     }
-
-
-def semantic_judge_default_result(error: Optional[str] = None) -> dict:
-    """Schema for the descriptive Text-to-3D semantic-only judge."""
-    return {"semantic": None, "reason": "", "error": error}
-
-
-def _strict_judge_axis(scores: dict, axis: str) -> tuple[Optional[float], Optional[str]]:
-    value = scores.get(axis)
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-    ):
-        return None, f"{axis} score missing or non-numeric"
-    numeric = float(value)
-    if not 1.0 <= numeric <= 10.0:
-        return None, f"{axis} score out of range: {value}"
-    return value, None
-
-
-def _strict_judge_reason(scores: dict) -> tuple[str, Optional[str]]:
-    reason = scores.get("reason")
-    if not isinstance(reason, str) or not reason.strip():
-        return "", "reason missing or non-string"
-    return reason, None
 
 
 def _normalize_image_list(paths: Union[str, List[str], None]) -> List[str]:
@@ -192,11 +137,7 @@ def llm_judge_score(llm_client,
                     condition_text: str = "",
                     enable_semantic: bool = False,
                     geometry_only: bool = False,
-                    semantic_only: bool = False,
-                    condition_image_paths: Union[str, List[str], None] = None,
-                    require_condition_image: bool = False,
-                    protocol_id: Optional[str] = None,
-                    trace_out: Optional[dict] = None) -> dict:
+                    semantic_only: bool = False) -> dict:
     """Use a VLM to score the similarity between predicted and GT CAD models.
 
     Args:
@@ -212,12 +153,11 @@ def llm_judge_score(llm_client,
         geometry_only: When True the judge scores ONLY geometry — aesthetics +
             semantic are dropped from both the prompt and the output dict (used
             for text-to-3d). Output dict in this mode: ``{geometry, reason, error}``.
-        semantic_only: When True, use the frozen descriptive Text-to-3D prompt
-            and return exactly ``{semantic, reason, error}``.
-        condition_image_paths: Original model-visible image condition for
-            Image-/Assembly-3D. It is sent before PRED/GT multiviews.
-        require_condition_image: Fail before the model call when the formal
-            visual protocol has no original model-visible image.
+        semantic_only: When True the judge scores ONLY semantic category match,
+            using a separate prompt that explicitly tells the model to ignore
+            geometric differences. Used for descriptive Text-to-3D, where the
+            model never saw the GT so a geometric comparison would be unfair.
+            Output dict in this mode: ``{semantic, reason, error}``.
 
     Returns:
         dict with geometry score; plus aesthetics + optional semantic + avg unless
@@ -225,29 +165,10 @@ def llm_judge_score(llm_client,
     """
     pred_list = _normalize_image_list(pred_image_paths)
     gt_list = _normalize_image_list(gt_image_paths)
-    condition_images = _normalize_image_list(condition_image_paths)
-    default_result = semantic_judge_default_result if semantic_only else judge_default_result
     if not pred_list:
-        return default_result(f"Pred image(s) missing: {pred_image_paths}")
+        return judge_default_result(f"Pred image(s) missing: {pred_image_paths}")
     if not gt_list:
-        return default_result(f"GT image(s) missing: {gt_image_paths}")
-
-    if protocol_id == PAPER_PROTOCOL_ID:
-        if len(pred_list) != PAPER_CANONICAL_VIEW_COUNT:
-            return default_result(
-                f"Paper protocol requires exactly {PAPER_CANONICAL_VIEW_COUNT} PRED views; "
-                f"got {len(pred_list)}"
-            )
-        if len(gt_list) != PAPER_CANONICAL_VIEW_COUNT:
-            return default_result(
-                f"Paper protocol requires exactly {PAPER_CANONICAL_VIEW_COUNT} GT views; "
-                f"got {len(gt_list)}"
-            )
-        if require_condition_image and len(condition_images) != 1:
-            return default_result(
-                "Paper visual judge requires exactly one original "
-                f"model-visible condition image; got {len(condition_images)}"
-            )
+        return judge_default_result(f"GT image(s) missing: {gt_image_paths}")
 
     n_pred, n_gt = len(pred_list), len(gt_list)
     view_order = (
@@ -256,21 +177,16 @@ def llm_judge_score(llm_client,
         "3: bottom-back-right diagonal looking up, "
         "4: bottom-front-left diagonal looking up — all at ±30° elevation)"
     )
-    offset = len(condition_images)
-    condition_note = (
-        f"Image 1 is the original model-visible condition image.\n"
-        if offset == 1 else
-        (f"Images 1..{offset} are the original model-visible condition images.\n"
-         if offset else "")
-    )
     multiview_note = (
-        f"{condition_note}"
-        f"Images {offset + 1}..{offset + n_pred} are PRED rendered from {view_order}.\n"
-        f"Images {offset + n_pred + 1}..{offset + n_pred + n_gt} are GT rendered from the same views."
+        f"Images 1..{n_pred} are PRED rendered from {view_order}.\n"
+        f"Images {n_pred + 1}..{n_pred + n_gt} are GT rendered from the same views."
         if n_pred > 1 or n_gt > 1 else
-        f"{condition_note}Image {offset + 1} is PRED, Image {offset + 2} is GT."
+        "Image 1 is PRED, Image 2 is GT."
     )
 
+    # semantic_only takes precedence — drop geometry and aesthetics, keep only
+    # semantic. Used for descriptive text input, where geometric comparison is
+    # unfair (the model never saw the GT image).
     if semantic_only:
         geometry_only = False
         enable_semantic = True
@@ -417,9 +333,9 @@ The models have been approximately aligned, so ignore small pose offsets that pe
 
 {condition_line}## Evaluation procedure
 
-Step 1 — Cross-check every view pair by local view index (PRED view 1 vs GT view 1,
-PRED view 2 vs GT view 2, PRED view 3 vs GT view 3, and PRED view 4 vs GT view 4
-— each pair is the same viewpoint):
+Step 1 — Cross-check every view pair by index (image 1 PRED vs image 1 GT,
+image 2 PRED vs image 2 GT, image 3 PRED vs image 3 GT, image 4 PRED vs
+image 4 GT — each pair is the same viewpoint):
   - Views 1 & 2 look DOWN from above at opposite diagonals: use them to check
     top surfaces and top-facing features (bosses, through-holes from the top,
     upper fillets/chamfers).
@@ -458,65 +374,44 @@ Respond in EXACTLY this JSON format, nothing else:
 
     try:
         response_text = _generate_text(
-            llm_client, prompt, images=condition_images + pred_list + gt_list, timeout=240,
-            trace_kind=("judge_semantic_only" if semantic_only else "judge_visual"),
-            trace_out=trace_out,
+            llm_client, prompt, images=pred_list + gt_list, timeout=240,
         )
 
         scores = extract_json_object(response_text)
         if not scores:
-            return default_result(f"Could not parse LLM response: {response_text[:200]}")
+            return judge_default_result(f"Could not parse LLM response: {response_text[:200]}")
+
+        geometry_score = scores.get("geometry", 0)
+        scores["geometry"] = geometry_score
+        scores.setdefault("reason", "")
+        scores["error"] = None
 
         if semantic_only:
-            semantic_score, axis_error = _strict_judge_axis(
-                scores, "semantic"
-            )
-            reason, reason_error = _strict_judge_reason(scores)
-            if axis_error or reason_error:
-                return semantic_judge_default_result(
-                    axis_error or reason_error
-                )
+            # Only the semantic axis was asked for; nothing else is meaningful.
             return {
-                "semantic": semantic_score,
-                "reason": reason,
+                "semantic": scores.get("semantic", 0),
+                "reason": scores.get("reason", ""),
                 "error": None,
             }
-
-        reason, reason_error = _strict_judge_reason(scores)
-        geometry_score, geometry_error = _strict_judge_axis(
-            scores, "geometry"
-        )
-        if reason_error or geometry_error:
-            return judge_default_result(reason_error or geometry_error)
 
         if geometry_only:
+            # Drop any extra keys the LLM might still emit; only keep the
+            # geometry-mode schema.
             return {
                 "geometry": geometry_score,
-                "reason": reason,
+                "reason": scores.get("reason", ""),
                 "error": None,
             }
 
-        aesthetics_score, aesthetics_error = _strict_judge_axis(
-            scores, "aesthetics"
-        )
-        if aesthetics_error:
-            return judge_default_result(aesthetics_error)
-        semantic_score = None
-        if enable_semantic:
-            semantic_score, semantic_error = _strict_judge_axis(
-                scores, "semantic"
-            )
-            if semantic_error:
-                return judge_default_result(semantic_error)
-        return {
-            "geometry": geometry_score,
-            "semantic": semantic_score,
-            "aesthetics": aesthetics_score,
-            "reason": reason,
-            "error": None,
-        }
+        aesthetics_score = scores.get("aesthetics", 0)
+        semantic_score = scores.get("semantic")
+        if not (enable_semantic and semantic_score is not None):
+            semantic_score = None
+        scores["aesthetics"] = aesthetics_score
+        scores["semantic"] = semantic_score
+        return scores
     except Exception as e:
-        return default_result(f"LLM judge failed: {e}")
+        return judge_default_result(f"LLM judge failed: {e}")
 
 
 # ==========================================================================
@@ -678,126 +573,6 @@ def select_bank_questions(qa_bank: dict, text_mode: Optional[str] = None,
     return out
 
 
-def validate_paper_qa_bank(
-    qa_bank: dict,
-    *,
-    text_mode: str,
-    fmt: str,
-    expected_uid: Optional[str] = None,
-) -> List[dict]:
-    """Validate and select one frozen v9 QA-bank variant without regenerating it."""
-    if text_mode not in {"parametric", "descriptive"}:
-        raise ValueError(f"Invalid paper QA text mode: {text_mode!r}")
-    hf_fmt = _HF_QA_FORMAT.get(fmt)
-    if hf_fmt is None:
-        raise ValueError(f"Unsupported paper QA prediction format: {fmt!r}")
-    version = qa_bank.get("qa_bank_version")
-    if version != PAPER_QA_BANK_VERSION:
-        raise ValueError(
-            f"Paper protocol requires QA bank v{PAPER_QA_BANK_VERSION}; got {version!r}"
-        )
-    bank_uid = str(qa_bank.get("uid") or qa_bank.get("case_id") or "").strip()
-    if not bank_uid:
-        raise ValueError("Paper QA bank must carry its source UID")
-    validate_materialized_qa_bank_contract(
-        qa_bank,
-        expected_uid=expected_uid or bank_uid,
-    )
-
-    bank_mode = qa_bank.get("text_mode")
-    if bank_mode is not None and bank_mode != text_mode:
-        raise ValueError(
-            f"QA bank mode mismatch: expected {text_mode}, got {bank_mode}"
-        )
-    bank_format = qa_bank.get("format")
-    if bank_format is not None and bank_format != hf_fmt:
-        raise ValueError(
-            f"QA bank format mismatch: expected {hf_fmt}, got {bank_format}"
-        )
-    if (
-        qa_bank.get("semantic_source_text_level") is not None
-        and qa_bank.get("semantic_source_text_level") != "detailed"
-    ):
-        raise ValueError("QA bank semantic source must be detailed")
-    expected_param_source = (
-        "parametric_detail" if text_mode == "parametric" else ""
-    )
-    if (
-        qa_bank.get("param_source_text_level") is not None
-        and str(qa_bank.get("param_source_text_level") or "")
-        != expected_param_source
-    ):
-        raise ValueError(
-            f"QA bank param source must be {expected_param_source!r}"
-        )
-
-    questions = [
-        dict(question)
-        for question in _bank_questions(qa_bank)
-        if question.get("text_mode") == text_mode
-        and question.get("format") == hf_fmt
-    ]
-    expected_semantic = SEMANTIC_QA_COUNT
-    expected_param = 0 if text_mode == "descriptive" else PARAM_QA_COUNT
-    expected_total = expected_semantic + expected_param
-    if len(questions) != expected_total:
-        raise ValueError(
-            f"{text_mode}/{fmt} QA bank must contain {expected_total} questions; "
-            f"got {len(questions)}"
-        )
-
-    expected_qids = (
-        [f"semantic_{index}" for index in range(1, expected_semantic + 1)]
-        + [f"param_{index}" for index in range(1, expected_param + 1)]
-    )
-    actual_qids = [str(question.get("qid") or "").strip() for question in questions]
-    if actual_qids != expected_qids:
-        raise ValueError(
-            f"QA qid order must be {expected_qids}; got {actual_qids}"
-        )
-
-    semantic_n = param_n = 0
-    for index, question in enumerate(questions, start=1):
-        qid = str(question.get("qid", "")).strip()
-        if question.get("text_mode") != text_mode:
-            raise ValueError(
-                f"QA question {qid} mode must be {text_mode!r}"
-            )
-        if question.get("format") != hf_fmt:
-            raise ValueError(
-                f"QA question {qid} format must be {hf_fmt!r}"
-            )
-        split = question.get("split")
-        if split == "semantic":
-            semantic_n += 1
-            expected_source = "detailed"
-        elif split == "param":
-            param_n += 1
-            expected_source = "parametric_detail"
-        else:
-            raise ValueError(f"QA question {qid} has invalid split {split!r}")
-        if question.get("source_text_level") != expected_source:
-            raise ValueError(
-                f"QA question {qid} source_text_level must be "
-                f"{expected_source!r}"
-            )
-        options = question.get("options")
-        if not isinstance(options, list) or len(options) != 4:
-            raise ValueError(f"QA question {qid} must have exactly four A-D options")
-        normalized_options = [str(option).strip() for option in options]
-        if any(not option for option in normalized_options) or len(set(normalized_options)) != 4:
-            raise ValueError(f"QA question {qid} must have four non-empty distinct options")
-        if str(question.get("answer", "")).strip().upper() not in {"A", "B", "C", "D"}:
-            raise ValueError(f"QA question {qid} ground truth must be A-D")
-
-    if semantic_n != expected_semantic or param_n != expected_param:
-        raise ValueError(
-            f"QA split mismatch: semantic={semantic_n}/{expected_semantic}, "
-            f"param={param_n}/{expected_param}"
-        )
-    return questions
-
-
 def _format_question_block(questions: List[dict]) -> str:
     blocks = []
     for question in questions:
@@ -855,15 +630,15 @@ def answer_qa_bank(
     artifact_label: Optional[str] = None,
     artifact_name: str = "prediction",
     pred_stl_path: Optional[Union[str, Path]] = None,
-    protocol_id: Optional[str] = None,
-    trace_out: Optional[dict] = None,
 ) -> dict:
-    """Answer a fixed QA bank using prediction renders and artifact text.
+    """Answer a fixed QA bank using the prediction renders and artifact text.
 
     Args:
         llm_client: a :class:`p3dbench.models.ModelClient`.
         qa_bank: the shipped bank dict (``semantic`` + ``param`` splits).
-        pred_render_paths: canonical prediction render image paths.
+        pred_render_paths: predicted render image path(s). Four paths are the
+            canonical tetrahedral view set (2 from above, 2 from below at ±30°);
+            a single path is still accepted.
         fmt_slug: prediction format slug (e.g. ``"minimal-json"``).
         artifact_text: the predicted source artifact, in full.
         artifact_label: human label for the artifact; defaults from ``fmt_slug``.
@@ -877,46 +652,21 @@ def answer_qa_bank(
         [pred_render_paths] if isinstance(pred_render_paths, str)
         else list(pred_render_paths or [])
     )
-    pred_renders = [Path(path) for path in render_values if path and Path(path).exists()]
-    if protocol_id == PAPER_PROTOCOL_ID and len(pred_renders) != PAPER_CANONICAL_VIEW_COUNT:
-        raise ValueError(
-            f"Paper QA requires exactly {PAPER_CANONICAL_VIEW_COUNT} canonical "
-            f"prediction renders; got {len(pred_renders)}"
-        )
+    pred_renders = [Path(p) for p in render_values if p and Path(p).exists()]
     if not pred_renders:
-        raise FileNotFoundError("No prediction renders found")
+        raise FileNotFoundError(f"Prediction render not found: {pred_render_paths}")
 
     questions = _bank_questions(qa_bank)
     if not questions:
         raise ValueError("QA bank has no questions")
-    paper_contract = qa_bank.get("_paper_contract")
-    if protocol_id == PAPER_PROTOCOL_ID:
-        if not isinstance(paper_contract, dict):
-            raise ValueError("Paper QA requires a validated frozen-bank contract")
-        if paper_contract.get("format") != fmt_slug:
-            raise ValueError("Paper QA bank format does not match prediction format")
-        if not paper_contract.get("text_mode"):
-            raise ValueError("Paper QA bank contract is missing text mode")
-        bank_sha = str(paper_contract.get("bank_sha256") or "")
-        if len(bank_sha) != 64:
-            raise ValueError("Paper QA bank contract is missing SHA-256 provenance")
-        if paper_contract.get("qa_bank_version") != PAPER_QA_BANK_VERSION:
-            raise ValueError(
-                f"Paper QA requires bank v{PAPER_QA_BANK_VERSION}"
-            )
 
     if artifact_label is None:
         artifact_label = ARTIFACT_LABELS.get(fmt_slug.lower(), fmt_slug)
 
     mesh_summary = _extract_pred_mesh_summary(pred_stl_path)
-    if protocol_id == PAPER_PROTOCOL_ID and not mesh_summary:
-        raise ValueError(
-            "Paper QA requires measured prediction mesh bounding-box metadata"
-        )
     mesh_block = f"\n\n{mesh_summary}\n" if mesh_summary else ""
 
-    multiview = len(pred_renders) == 4
-    if multiview:
+    if len(pred_renders) == 4:
         view_desc = (
             "The attached images are 4 rendered views of the predicted CAD object "
             "from a tetrahedral coverage:\n"
@@ -978,31 +728,7 @@ Valid answer values: A, B, C, D, or E."""
         llm_client, prompt, images=[str(path) for path in pred_renders],
         temperature=0.1, max_tokens=32768,
         system=QA_ANSWERER_SYSTEM_PROMPT, timeout=180,
-        trace_kind="qa_answer",
-        trace_out=trace_out,
     )
-    if trace_out is not None:
-        source_mesh = (
-            file_fingerprint(str(pred_stl_path))
-            if pred_stl_path and Path(pred_stl_path).is_file()
-            else None
-        )
-        trace_out["evidence"] = {
-            "prediction_source": {
-                "name": artifact_name,
-                "sha256": sha256_text(artifact_text),
-                "bytes": len(artifact_text.encode("utf-8")),
-            },
-            "prediction_bbox": {
-                "present": bool(mesh_summary),
-                "sha256": (
-                    sha256_text(mesh_summary) if mesh_summary else None
-                ),
-                "source_mesh": source_mesh,
-            },
-            "prediction_render_count": len(pred_renders),
-            "qa_bank": dict(paper_contract) if paper_contract else None,
-        }
     payload = extract_json_object(raw_text)
     if not payload or not isinstance(payload.get("answers"), list):
         logger.error(
@@ -1135,9 +861,7 @@ N_JUDGE_VIEWS = len(JUDGE_VIEW_INDICES)
 
 
 def _render_pred_multiview(mesh_or_step_path: str, output_dir: Path,
-                           n_views: int = N_JUDGE_VIEWS,
-                           protocol_id: Optional[str] = None,
-                           allow_paper_single_view: bool = False) -> List[str]:
+                           n_views: int = N_JUDGE_VIEWS) -> List[str]:
     """Render ``n_views`` of the prediction, preferring occ/pyrender then blender.
 
     Returns the list of view PNG paths, or ``[]`` on any failure (so the judge
@@ -1150,29 +874,6 @@ def _render_pred_multiview(mesh_or_step_path: str, output_dir: Path,
     except Exception as exc:
         logger.debug("render backends unavailable: %s", exc)
         return []
-
-    if protocol_id == PAPER_PROTOCOL_ID:
-        expected_views = 1 if allow_paper_single_view else PAPER_CANONICAL_VIEW_COUNT
-        if n_views != expected_views:
-            logger.warning(
-                "paper renderer requires exactly %d views; got %d",
-                expected_views,
-                n_views,
-            )
-            return []
-        try:
-            views = blender.render_multiview(
-                mesh_or_step_path,
-                str(output_dir),
-                n_views=n_views,
-                resolution=PAPER_RENDER_RESOLUTION,
-                samples=PAPER_RENDER_SAMPLES,
-                seed=PAPER_RENDER_SEED,
-            )
-        except Exception as exc:
-            logger.debug("formal Blender render failed: %s", exc)
-            return []
-        return list(views) if len(views or []) == expected_views else []
 
     for backend in (occ, blender):
         renderer = getattr(backend, "render_multiview", None)
@@ -1205,6 +906,44 @@ def _resolve_text_mode(ctx: ScoreContext) -> str:
         meta = getattr(getattr(ctx.case, "case", None), "metadata", None) or {}
         mode = meta.get("text_mode")
     return mode or "parametric"
+
+
+def _gt_judge_views_or_render(ctx: ScoreContext) -> List[str]:
+    """The 4 canonical GT views, rendering them from the GT mesh if not shipped.
+
+    Image-/Assembly-3D ship 4 GT renders in the manifest (copied from the
+    research cache at materialization time). Text-to-3D does not: its GT mesh is
+    generated locally from the GT program, so there is nothing to copy and the
+    manifest carries a single view at most — which would silently disable the
+    descriptive J-Sem axis forever under the strict 4-view pairing rule.
+
+    So render them here, at eval time, through the same backend that renders the
+    PRED views (so both sides of a pair always come from one renderer), and cache
+    them next to the GT mesh so the cost is paid once per case, not once per model
+    per run. ``download`` stays a pure download: no render backend needed there.
+    """
+    shipped = [str(p) for p in (ctx.case.gt_renders or []) if p and Path(p).exists()]
+    if len(shipped) == N_JUDGE_VIEWS:
+        return shipped
+
+    gt_mesh = ctx.case.gt_mesh
+    if not gt_mesh or not Path(gt_mesh).is_file():
+        return shipped
+    cache_dir = Path(gt_mesh).parent / f"{Path(gt_mesh).stem}_judge_views"
+    cached = sorted(cache_dir.glob("*.png"))
+    if len(cached) == N_JUDGE_VIEWS:
+        return [str(p) for p in cached]
+    try:
+        views = _render_pred_multiview(str(gt_mesh), cache_dir)
+    except Exception as exc:
+        # e.g. a read-only data root: skip the axis, don't lose the whole bucket.
+        logger.warning("GT view render failed for %s: %s", ctx.case.id, exc)
+        return shipped
+    if len(views) != N_JUDGE_VIEWS:
+        logger.warning("could not render %d GT views for %s (got %d)",
+                       N_JUDGE_VIEWS, ctx.case.id, len(views))
+        return shipped
+    return views
 
 
 def _aligned_pred_source(ctx: ScoreContext) -> Optional[str]:
@@ -1263,135 +1002,71 @@ class _JudgeBucket(MetricBucket):
 
         # The Hub bank packs every text_mode×format variant; pick the active run's
         # subset (the demo/research single-variant bank passes through unchanged).
-        try:
-            if ctx.protocol_id == PAPER_PROTOCOL_ID:
-                expected_uid = str(
-                    (getattr(getattr(ctx.case, "case", None), "metadata", None) or {})
-                    .get("source_id") or ""
-                ) or None
-                questions = validate_paper_qa_bank(
-                    raw_bank,
-                    text_mode=text_mode,
-                    fmt=ctx.fmt,
-                    expected_uid=expected_uid,
-                )
-            else:
-                questions = select_bank_questions(
-                    raw_bank, text_mode=text_mode, fmt=ctx.fmt
-                )
-                if not questions:
-                    raise ValueError(f"no {text_mode}/{ctx.fmt} variant")
-        except ValueError as exc:
-            logger.warning("QA bank %s rejected: %s", qa_path, exc)
-            out["_judge_error"] = f"qa_bank_invalid: {exc}"
+        questions = select_bank_questions(raw_bank, text_mode=text_mode, fmt=ctx.fmt)
+        if not questions:
+            logger.warning("QA bank %s has no %s/%s variant", qa_path, text_mode, ctx.fmt)
             return out
-        bank_fingerprint = file_fingerprint(str(qa_path))
-        qa_bank = {
-            "questions": questions,
-            "_paper_contract": {
-                "qa_bank_version": PAPER_QA_BANK_VERSION,
-                "text_mode": text_mode,
-                "format": ctx.fmt,
-                "bank_sha256": bank_fingerprint["sha256"],
-            },
-        }
+        qa_bank = {"questions": questions}
 
         pred_stl = ctx.compiled.get("stl")
         if not pred_stl:
             return out  # invalid prediction: nothing to render / answer about
 
-        # Paper protocol: source + bbox + exactly four aligned canonical renders.
+        # The answerer sees the canonical 4-view set of the aligned prediction
+        # (same views the visual judge uses), plus the source and measured bbox.
         render_dir = ctx.work_dir / "qa_render"
-        pred_source = _aligned_pred_source(ctx) or str(pred_stl)
-        view_count = (
-            PAPER_CANONICAL_VIEW_COUNT
-            if ctx.protocol_id == PAPER_PROTOCOL_ID else 1
-        )
-        views = _render_pred_multiview(
-            pred_source,
-            render_dir,
-            n_views=view_count,
-            protocol_id=ctx.protocol_id,
-        )
-        if len(views) != view_count:
-            out["_judge_error"] = (
-                f"qa_render_gap: expected {view_count} prediction views, got {len(views)}"
-            )
-            return out
+        pred_src = _aligned_pred_source(ctx) or str(pred_stl)
+        views = _render_pred_multiview(pred_src, render_dir)
+        if len(views) != N_JUDGE_VIEWS:
+            return out  # no render backend / partial render -> clean skip
 
         artifact_text = ctx.shared.get("stage1_code") or ""
 
         try:
-            trace = {} if ctx.protocol_id == PAPER_PROTOCOL_ID else None
             payload = answer_qa_bank(
                 ctx.judge_client, qa_bank, views,
                 fmt_slug=ctx.fmt, artifact_text=artifact_text,
                 artifact_name=f"{ctx.case.id}.{ctx.fmt}",
                 pred_stl_path=pred_stl,
-                protocol_id=ctx.protocol_id,
-                trace_out=trace,
             )
-            if trace is not None and trace:
-                append_call_trace(ctx.shared, trace)
-            qa_rows, qa_metrics = score_qa_results(qa_bank, payload)
+            _rows, qa_metrics = score_qa_results(qa_bank, payload)
         except Exception as exc:
             logger.warning("QA answering/scoring failed for %s: %s", ctx.case.id, exc)
-            out["_judge_error"] = f"qa_answer_gap: {type(exc).__name__}: {exc}"
             return out
 
-        # Keep the scientific response and question-level scoring evidence.
-        # Aggregation consumes only the canonical numeric keys below.
-        out["qa_answer_payload"] = payload
-        out["qa_results"] = qa_rows
-        out["qa_scoring"] = qa_metrics
         out["qa_semantic"] = qa_metrics["semantic_accuracy"]
         if text_mode == "descriptive":
             # Descriptive: param fidelity is not scored; add a single semantic
             # judge axis (visual J-Sem) instead.
-            result = self._descriptive_judge_semantic(ctx, pred_stl)
-            out["judge_semantic_result"] = result
-            if result.get("error"):
-                out["_judge_error"] = result["error"]
-            else:
-                out["judge_semantic"] = result.get("semantic")
+            out["judge_semantic"] = self._descriptive_judge_semantic(ctx, pred_stl)
         else:
             out["qa_param"] = qa_metrics["param_accuracy"]
         return out
 
-    def _descriptive_judge_semantic(self, ctx: ScoreContext, pred_stl) -> dict:
+    def _descriptive_judge_semantic(self, ctx: ScoreContext, pred_stl) -> Optional[float]:
         """Single semantic axis for descriptive Text-to-3D (strict 4v pairing)."""
-        gt_renders = [str(p) for p in (ctx.case.gt_renders or []) if p]
+        gt_renders = _gt_judge_views_or_render(ctx)
         if len(gt_renders) != N_JUDGE_VIEWS:
-            return semantic_judge_default_result(
-                f"expected {N_JUDGE_VIEWS} GT views, got {len(gt_renders)}"
-            )
+            return None
         pred_src = _aligned_pred_source(ctx) or str(pred_stl)
-        pred_views = _render_pred_multiview(
-            pred_src,
-            ctx.work_dir / "multiview",
-            protocol_id=ctx.protocol_id,
-        )
+        pred_views = _render_pred_multiview(pred_src, ctx.work_dir / "multiview")
         if len(pred_views) != N_JUDGE_VIEWS:
-            return semantic_judge_default_result(
-                f"expected {N_JUDGE_VIEWS} PRED views, got {len(pred_views)}"
-            )
+            return None
+        # Same resolver generation uses, so the judge scores against the exact
+        # text the model saw (input.text alone would be the parametric variant).
         condition_text = resolve_text_condition(ctx.case.case, "descriptive")
-        trace = {} if ctx.protocol_id == PAPER_PROTOCOL_ID else None
         result = llm_judge_score(
             ctx.judge_client, pred_views, gt_renders,
             condition_text=condition_text,
             enable_semantic=True, geometry_only=False, semantic_only=True,
-            protocol_id=ctx.protocol_id,
-            trace_out=trace,
         )
-        if trace is not None and trace:
-            append_call_trace(ctx.shared, trace)
-        return result
+        if result.get("error"):
+            return None  # evaluation gap, not a 0 score
+        return result.get("semantic")
 
     # -- Image-to-3D / Assembly-3D : visual judge -----------------------
     def _score_visual(self, ctx: ScoreContext) -> dict:
         out = {k: None for k in _VISUAL_JUDGE_KEYS}
-        out["judge_visual_result"] = None
 
         if ctx.judge_client is None:
             return out  # clean skip
@@ -1405,41 +1080,23 @@ class _JudgeBucket(MetricBucket):
         if not pred_src:
             return out  # invalid prediction
 
-        pred_views = _render_pred_multiview(
-            pred_src,
-            ctx.work_dir / "multiview",
-            protocol_id=ctx.protocol_id,
-        )
+        pred_views = _render_pred_multiview(pred_src, ctx.work_dir / "multiview")
         # STRICT pairing: PRED must also have exactly N views (no mis-pairing).
         if len(pred_views) != N_JUDGE_VIEWS:
             return out
 
         condition = getattr(getattr(ctx.case, "case", None), "input", None)
         condition_text = getattr(condition, "text", "") or ""
-        condition_images = [
-            str(path) for path in (getattr(ctx.case, "image_paths", None) or [])
-            if path and Path(path).exists()
-        ][:1]
 
-        trace = {} if ctx.protocol_id == PAPER_PROTOCOL_ID else None
         result = llm_judge_score(
             ctx.judge_client, pred_views, gt_renders,
             condition_text=condition_text,
             enable_semantic=True, geometry_only=False,
-            condition_image_paths=condition_images,
-            require_condition_image=True,
-            protocol_id=ctx.protocol_id,
-            trace_out=trace,
         )
-        out["judge_visual_result"] = result
-        if trace is not None and trace:
-            append_call_trace(ctx.shared, trace)
         if result.get("error"):
             # The judge could not run (API/parse failure) — an evaluation gap,
-            # not a model failure. Leave required metrics missing so summarize
-            # blocks promotion instead of averaging a partial subset.
+            # not a model failure. Skip (drop from the mean) rather than score 0.
             logger.warning("judge skipped for %s: %s", ctx.case.id, result["error"])
-            out["_judge_error"] = result["error"]
             return out
         out["judge_geometry"] = result.get("geometry")
         out["judge_semantic"] = result.get("semantic")

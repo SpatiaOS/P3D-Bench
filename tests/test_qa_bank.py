@@ -10,20 +10,13 @@ a single variant already carrying ``split``.
 from __future__ import annotations
 
 import json
-import copy
 from pathlib import Path
-
-import pytest
 
 from p3dbench.data.full_builder import _write_qa_bank
 from p3dbench.metrics.judge import (
+    answer_qa_bank,
     score_qa_results,
     select_bank_questions,
-    validate_paper_qa_bank,
-)
-from p3dbench.protocol import (
-    PAPER_QA_BANK_VERSION,
-    qa_questions_content_sha256,
 )
 
 REPO = Path(__file__).resolve().parents[1]
@@ -32,31 +25,13 @@ REPO = Path(__file__).resolve().parents[1]
 # descriptive (4 sem only), each in the "json" format slug.
 _HUB_QUESTIONS = (
     [{"text_mode": "parametric", "format": "json", "qid": f"semantic_{i}",
-      "split": "semantic", "source_text_level": "detailed",
       "question": "q", "options": ["a", "b", "c", "d"], "answer": "A"} for i in range(1, 5)]
     + [{"text_mode": "parametric", "format": "json", "qid": f"param_{i}",
-        "split": "param", "source_text_level": "parametric_detail",
         "question": "q", "options": ["a", "b", "c", "d"], "answer": "B"} for i in range(1, 9)]
     + [{"text_mode": "descriptive", "format": "json", "qid": f"semantic_{i}",
-        "split": "semantic", "source_text_level": "detailed",
         "question": "q", "options": ["a", "b", "c", "d"], "answer": "C"} for i in range(1, 5)]
 )
-_HUB_BANK = {
-    "uid": "0000/00000000",
-    "qa_bank_version": PAPER_QA_BANK_VERSION,
-    "questions": _HUB_QUESTIONS,
-}
-
-
-def _materialized_bank(tmp_path: Path, questions=None) -> dict:
-    dst = tmp_path / "paper-bank.json"
-    _write_qa_bank(
-        "0000/00000000",
-        questions or _HUB_QUESTIONS,
-        dst,
-        overwrite=True,
-    )
-    return json.loads(dst.read_text(encoding="utf-8"))
+_HUB_BANK = {"uid": "0000/00000000", "questions": _HUB_QUESTIONS}
 
 
 def test_hub_variant_selection():
@@ -95,91 +70,60 @@ def test_write_qa_bank_fills_split(tmp_path):
     _write_qa_bank("0000/00000000", _HUB_QUESTIONS, dst, overwrite=False)
     written = json.loads(dst.read_text())
     assert written["uid"] == "0000/00000000"
-    assert written["qa_bank_version"] == PAPER_QA_BANK_VERSION
     assert all("split" in q for q in written["questions"])
-    assert all("source_text_level" in q for q in written["questions"])
-    assert written["source_contract"]["source_sha256"]
-    assert written["content_sha256"] == qa_questions_content_sha256(
-        written["questions"]
-    )
     # qid prefix drives the split.
     by_qid = {q["qid"]: q["split"] for q in written["questions"]}
     assert by_qid["param_1"] == "param" and by_qid["semantic_1"] == "semantic"
 
 
-def test_paper_bank_validation_is_v9_and_strict(tmp_path):
-    bank = _materialized_bank(tmp_path)
-    questions = validate_paper_qa_bank(
-        bank,
-        text_mode="parametric",
-        fmt="minimal-json",
-        expected_uid="0000/00000000",
+class _FakeResponse:
+    def __init__(self, text):
+        self.text = text
+
+
+class _FakeClient:
+    """Records the images the answerer actually attached."""
+
+    def __init__(self):
+        self.images = None
+        self.prompt = None
+
+    def generate(self, prompt, images=None, **kwargs):
+        self.prompt = prompt
+        self.images = list(images or [])
+        return _FakeResponse('{"answers": []}')
+
+
+def test_answer_qa_bank_sends_the_full_canonical_view_set(tmp_path):
+    """The answerer sees all 4 canonical views, not just one."""
+    renders = []
+    for i in range(4):
+        p = tmp_path / f"view_{i}.png"
+        p.write_bytes(b"")
+        renders.append(str(p))
+    client = _FakeClient()
+    questions = select_bank_questions(_HUB_BANK, "parametric", "minimal-json")
+
+    answer_qa_bank(
+        client, {"questions": questions}, renders,
+        fmt_slug="minimal-json", artifact_text="// code",
     )
-    assert len(questions) == 12
 
-    stale = dict(bank, qa_bank_version=8)
-    try:
-        validate_paper_qa_bank(stale, text_mode="parametric", fmt="minimal-json")
-    except ValueError as exc:
-        assert "v9" in str(exc)
-    else:
-        raise AssertionError("stale bank must be rejected")
+    assert client.images == renders
+    assert "4 views" in client.prompt
+    assert "Image 4: bottom-front-left diagonal looking up" in client.prompt
 
 
-def test_paper_bank_rejects_duplicate_options_and_e_ground_truth(tmp_path):
-    bad_questions = [dict(q) for q in _HUB_QUESTIONS]
-    bad_questions[0] = dict(
-        bad_questions[0],
-        options=["same", "same", "c", "d"],
-        answer="E",
+def test_answer_qa_bank_still_accepts_a_single_render(tmp_path):
+    single = tmp_path / "view.png"
+    single.write_bytes(b"")
+    client = _FakeClient()
+    questions = select_bank_questions(_HUB_BANK, "parametric", "minimal-json")
+
+    answer_qa_bank(
+        client, {"questions": questions}, str(single),
+        fmt_slug="minimal-json", artifact_text="// code",
     )
-    bad = _materialized_bank(tmp_path)
-    bad["questions"] = bad_questions
-    bad["content_sha256"] = qa_questions_content_sha256(bad_questions)
-    try:
-        validate_paper_qa_bank(bad, text_mode="parametric", fmt="minimal-json")
-    except ValueError as exc:
-        assert "distinct" in str(exc) or "A-D" in str(exc)
-    else:
-        raise AssertionError("invalid A-D bank must be rejected")
 
-
-@pytest.mark.parametrize(
-    ("mutator", "message"),
-    [
-        (
-            lambda questions: questions.__setitem__(
-                slice(0, 2), list(reversed(questions[:2]))
-            ),
-            "qid order",
-        ),
-        (
-            lambda questions: questions[0].__setitem__(
-                "source_text_level", "abstract"
-            ),
-            "source_text_level",
-        ),
-        (
-            lambda questions: questions[0].__setitem__(
-                "text_mode", "descriptive"
-            ),
-            "questions",
-        ),
-        (
-            lambda questions: questions[0].__setitem__("format", "openscad"),
-            "questions",
-        ),
-    ],
-)
-def test_paper_bank_rejects_wrong_order_source_mode_or_format(
-    tmp_path, mutator, message
-):
-    questions = copy.deepcopy(_HUB_QUESTIONS)
-    mutator(questions)
-    bank = _materialized_bank(tmp_path)
-    bank["questions"] = questions
-    bank["content_sha256"] = qa_questions_content_sha256(questions)
-    with pytest.raises(ValueError, match=message):
-        validate_paper_qa_bank(
-            bank, text_mode="parametric", fmt="minimal-json"
-        )
+    assert client.images == [str(single)]
+    assert "4 views" not in client.prompt

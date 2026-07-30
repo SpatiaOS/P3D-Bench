@@ -169,7 +169,6 @@ def test_refine_recovers_on_feedback():
     assert row["error"] is None
     assert row["attempts"] == 2
     assert "GOOD" in row["code"]
-    assert row["failure_class"] is None
     # second call must include the fed-back error + previous code
     assert "failed to compile" in fc.prompts[1]
     assert "BAD 1" in fc.prompts[1]
@@ -183,7 +182,8 @@ def test_refine_exhausts_all_invalid():
     assert row["error"] is not None
     assert row["attempts"] == 3
     assert len(fc.prompts) == 3
-    assert row["failure_class"] == P.FAILURE_GENERATION_INVALID
+    # Uncompilable code is the model's own failure: still scored (worst-filled).
+    assert row["llm_failed"] is False
 
 
 def test_refine_escalates_on_repeated_error():
@@ -200,8 +200,9 @@ def test_refine_empty_extraction_stops_immediately():
     row = {"id": "c"}
     P._infer_with_refine(fc, FakeFormat(), Bundle(), row, max_attempts=3)
     assert row["error"] == "empty code extraction"
-    assert row["failure_class"] == P.FAILURE_GENERATION_INVALID
     assert len(fc.prompts) == 1               # no wasted retries
+    # The model answered — that is a model failure, not an untested case.
+    assert row["llm_failed"] is False
 
 
 def test_refine_llm_failure_stops_immediately():
@@ -218,7 +219,8 @@ def test_refine_llm_failure_stops_immediately():
     P._infer_with_refine(bc, FakeFormat(), Bundle(), row, max_attempts=3)
     assert "api exploded" in row["error"]
     assert bc.n == 1                          # LLM-side failure: no feedback retry
-    assert row["failure_class"] == P.FAILURE_INFERENCE_GAP
+    # No response ever arrived -> untested, excluded from the aggregates.
+    assert row["llm_failed"] is True
 
 
 def test_refine_usage_accumulates():
@@ -232,10 +234,11 @@ def test_single_shot_path_sets_no_attempt_history():
     fc = FakeClient([_good()])
     # `infer` seeds these base fields before calling; single-shot only overwrites
     # `error` on failure, so reproduce that contract here.
-    row = {"id": "c", "raw_text": None, "code": None, "usage": {}, "error": None}
+    row = {"id": "c", "raw_text": None, "code": None, "usage": {}, "error": None,
+           "llm_failed": False}
     P._infer_single_shot(fc, FakeFormat(), Bundle(), row)
     assert row["error"] is None
-    assert row["failure_class"] is None
+    assert row["llm_failed"] is False
     assert "GOOD" in row["code"]
     assert "attempt_history" not in row      # single-shot carries no refine record
 
@@ -277,3 +280,15 @@ def test_build_refine_prompt_contents():
     assert "image(s)" in p                   # image hint when has_images
     assert "Failing line number: 2" in p     # diagnostics
     assert "times in a row" in p             # escalation at repeat>=2
+
+
+def test_single_shot_api_failure_marks_untested():
+    class BoomClient:
+        def generate(self, prompt, *, images=None, system=None):
+            raise RuntimeError("api exploded")
+
+    row = {"id": "c", "raw_text": None, "code": None, "usage": {}, "error": None,
+           "llm_failed": False}
+    P._infer_single_shot(BoomClient(), FakeFormat(), Bundle(), row)
+    assert "api exploded" in row["error"]
+    assert row["llm_failed"] is True

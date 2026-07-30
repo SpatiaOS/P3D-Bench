@@ -860,9 +860,7 @@ def iou_csg(mesh_pred, mesh_gt, skip_normalize: bool = False):
     Inputs should be closed meshes (no open edges). If ``skip_normalize`` is
     False, both meshes are independently normalized to ``[-0.5, 0.5]^3`` first.
 
-    Returns ``(iou_value, pred_winding_fixed, gt_winding_fixed)``. An evaluator
-    failure or non-positive union returns ``None`` (unavailable), never a
-    scientific zero.
+    Returns ``(iou_value, pred_winding_fixed, gt_winding_fixed)``.
     """
     np = _np()
     if not skip_normalize:
@@ -884,11 +882,11 @@ def iou_csg(mesh_pred, mesh_gt, skip_normalize: bool = False):
         union_volume = pred_volume + gt_volume - intersection_volume
 
         if union_volume <= 0:
-            return None, pred_fixed, gt_fixed
+            return 0.0, pred_fixed, gt_fixed
         return float(np.clip(intersection_volume / union_volume, 0.0, 1.0)), pred_fixed, gt_fixed
     except Exception as e:
         logger.warning(f"iou_csg failed: {e}")
-        return None, pred_fixed, gt_fixed
+        return 0.0, pred_fixed, gt_fixed
 
 
 # ==========================================================================
@@ -1160,14 +1158,10 @@ def align_and_compute(
         try:
             csg_val, pred_winding_fixed, gt_winding_fixed = iou_csg(
                 mesh_pred_n, mesh_gt_n, skip_normalize=True)
+            iou_value = round(csg_val, 4)
+            result["iou_csg"] = iou_value
             result["iou_csg_pred_winding_fixed"] = pred_winding_fixed
             result["iou_csg_gt_winding_fixed"] = gt_winding_fixed
-            if csg_val is None:
-                result["iou_csg_status"] = "unavailable"
-            else:
-                iou_value = round(csg_val, 4)
-                result["iou_csg"] = iou_value
-                result["iou_csg_status"] = "measured"
         except Exception as e:
             logger.warning(f"IoU CSG failed: {e}")
     elif compute_iou_variant is not None:
@@ -1279,13 +1273,8 @@ class _GeometryBucket(MetricBucket):
             "iou_variant": iou_variant,
         }
 
-        # Canonical scores plus the raw PRED/GT NoOE evidence needed to decide
-        # whether a missing IoU is inapplicable or an evaluator gap.
-        return {
-            **{k: metrics.get(k) for k in _GEOMETRY_KEYS},
-            "pred_open_edge_ratio": metrics.get("pred_open_edge_ratio"),
-            "gt_open_edge_ratio": metrics.get("gt_open_edge_ratio"),
-        }
+        # Return only the canonical raw geometry keys (iou=None when gated out).
+        return {k: metrics.get(k) for k in _GEOMETRY_KEYS}
 
 
 BUCKET = _GeometryBucket()

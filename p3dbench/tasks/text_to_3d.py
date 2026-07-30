@@ -29,6 +29,7 @@ class TextTo3DTask(Task):
         self, fmt: Format, case: Case, image_paths: list[str], *, text_mode: str = "parametric"
     ) -> PromptBundle:
         self.check_format(fmt)
+        # Shared with the descriptive J-Sem judge so both see the same condition.
         text = resolve_text_condition(case, text_mode)
         user = PROMPT_TEMPLATE.format(display_name=fmt.display_name, text=text)
         return PromptBundle(system=fmt.system_guidelines, user=user, images=[])
