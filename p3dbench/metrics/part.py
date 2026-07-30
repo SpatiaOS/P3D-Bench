@@ -960,15 +960,28 @@ class _PartBucket(MetricBucket):
 
         fmt = get_format(ctx.fmt)
 
-        # Single render of the pred geometry as an optional visual cue. The demo
-        # harness does not require a render; infer part boundaries from the code.
-        has_image = False
+        # One render of the prediction's OWN union as a visual cue, matching the
+        # research runner (it renders pred_render.png from the predicted STL and
+        # passes has_image). The anti-leak invariant holds: this is the model's
+        # own geometry, never GT. build_decompose_prompt emits different text for
+        # the two branches, so a missing render backend degrades to the
+        # documented code-only prompt instead of failing the case.
+        from .judge import _render_pred_multiview
+
+        render_paths = _render_pred_multiview(
+            str(stage1_stl), Path(ctx.work_dir) / "part_render", n_views=1,
+        )
+        has_image = len(render_paths) == 1
+        if not has_image:
+            logger.debug("part: no pred render for %s — code-only decomposition",
+                         ctx.case.id)
 
         # 2. Build the stage-2 decomposition prompt + 3. call the client.
         prompt = TASK.build_decompose_prompt(fmt, stage1_code, has_image)
         try:
             resp = ctx.decompose_client.generate(
-                prompt, system=fmt.system_guidelines, timeout=300,
+                prompt, images=render_paths or None,
+                system=fmt.system_guidelines, timeout=300,
             )
         except Exception as exc:
             return _empty(f"decomposition call failed: {type(exc).__name__}: {exc}")
