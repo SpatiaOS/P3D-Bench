@@ -30,11 +30,16 @@ helper ([`p3dbench/text_condition.py`](../p3dbench/text_condition.py)), so the j
 scores against the exact text the model was shown (`metadata.text_desc` in
 descriptive mode, with the documented parametric fallback when it is absent).
 
+J-Sem needs 4 GT views. Unlike the other two tasks, Text-to-3D has no GT renders
+to ship — its GT mesh is built locally from the GT program — so the Judge bucket
+renders them from that mesh at eval time, through the same backend it uses for the
+prediction views, and caches them next to the mesh. `download` therefore stays a
+pure download and needs no render backend.
+
 > **Demo split note.** The in-repo **demo** split currently carries only the
 > parametric text. On the demo split `--text-mode descriptive` therefore selects
-> the descriptive *metric panel* but feeds the parametric text, and J-Sem expects
-> 4 GT renders that the demo cases do not provide. Use the parametric mode for
-> demo smoke tests.
+> the descriptive *metric panel* but feeds the parametric text. Use the parametric
+> mode for demo smoke tests.
 
 ## Image-to-3D
 

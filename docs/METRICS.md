@@ -66,7 +66,9 @@ The model is set in [`configs/judge.yaml`](../configs/judge.yaml). Three familie
   the model generated from text alone and never saw the GT, so the judge is told
   to ignore geometric differences and score only whether PRED is the right
   category of object. It receives the same description the generator saw, 4
-  aligned pred views and the 4 same-view GT renders.
+  aligned pred views and the 4 same-view GT renders. Text-to-3D ships no GT
+  renders, so they are rendered from the GT mesh at eval time (same backend as
+  the pred views) and cached next to the mesh.
 - **QA** (Text-to-3D): the prediction is probed with a prebuilt multiple-choice
   bank that ships with the data (`targets/qa/<id>.json`). **QA-S** = accuracy over
   the 4 semantic questions, **QA-P** = accuracy over the 8 parametric questions.

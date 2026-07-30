@@ -908,6 +908,44 @@ def _resolve_text_mode(ctx: ScoreContext) -> str:
     return mode or "parametric"
 
 
+def _gt_judge_views_or_render(ctx: ScoreContext) -> List[str]:
+    """The 4 canonical GT views, rendering them from the GT mesh if not shipped.
+
+    Image-/Assembly-3D ship 4 GT renders in the manifest (copied from the
+    research cache at materialization time). Text-to-3D does not: its GT mesh is
+    generated locally from the GT program, so there is nothing to copy and the
+    manifest carries a single view at most — which would silently disable the
+    descriptive J-Sem axis forever under the strict 4-view pairing rule.
+
+    So render them here, at eval time, through the same backend that renders the
+    PRED views (so both sides of a pair always come from one renderer), and cache
+    them next to the GT mesh so the cost is paid once per case, not once per model
+    per run. ``download`` stays a pure download: no render backend needed there.
+    """
+    shipped = [str(p) for p in (ctx.case.gt_renders or []) if p and Path(p).exists()]
+    if len(shipped) == N_JUDGE_VIEWS:
+        return shipped
+
+    gt_mesh = ctx.case.gt_mesh
+    if not gt_mesh or not Path(gt_mesh).is_file():
+        return shipped
+    cache_dir = Path(gt_mesh).parent / f"{Path(gt_mesh).stem}_judge_views"
+    cached = sorted(cache_dir.glob("*.png"))
+    if len(cached) == N_JUDGE_VIEWS:
+        return [str(p) for p in cached]
+    try:
+        views = _render_pred_multiview(str(gt_mesh), cache_dir)
+    except Exception as exc:
+        # e.g. a read-only data root: skip the axis, don't lose the whole bucket.
+        logger.warning("GT view render failed for %s: %s", ctx.case.id, exc)
+        return shipped
+    if len(views) != N_JUDGE_VIEWS:
+        logger.warning("could not render %d GT views for %s (got %d)",
+                       N_JUDGE_VIEWS, ctx.case.id, len(views))
+        return shipped
+    return views
+
+
 def _aligned_pred_source(ctx: ScoreContext) -> Optional[str]:
     """Path/mesh for the predicted geometry to render.
 
@@ -1007,7 +1045,7 @@ class _JudgeBucket(MetricBucket):
 
     def _descriptive_judge_semantic(self, ctx: ScoreContext, pred_stl) -> Optional[float]:
         """Single semantic axis for descriptive Text-to-3D (strict 4v pairing)."""
-        gt_renders = [str(p) for p in (ctx.case.gt_renders or []) if p]
+        gt_renders = _gt_judge_views_or_render(ctx)
         if len(gt_renders) != N_JUDGE_VIEWS:
             return None
         pred_src = _aligned_pred_source(ctx) or str(pred_stl)

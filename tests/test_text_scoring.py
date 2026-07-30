@@ -6,6 +6,8 @@ the benchmark reports, so pin them.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from p3dbench.data.schema import Case
@@ -78,3 +80,77 @@ def test_generation_prompt_uses_the_same_resolver():
 def test_unknown_text_mode_is_rejected():
     with pytest.raises(ValueError):
         resolve_text_condition(_case(), "detailed")
+
+
+# -- GT judge views ---------------------------------------------------------
+class _FakeResolved:
+    """Minimal ResolvedCase stand-in for the GT-view helper."""
+
+    def __init__(self, case, gt_mesh=None, gt_renders=()):
+        self.case = case
+        self.gt_mesh = gt_mesh
+        self.gt_renders = list(gt_renders)
+
+    @property
+    def id(self):
+        return self.case.id
+
+
+def _ctx(resolved):
+    from p3dbench.metrics.base import ScoreContext
+
+    return ScoreContext(
+        case=resolved, task="text-to-3d", fmt="openscad",
+        compiled={}, work_dir=None,
+    )
+
+
+def test_shipped_four_gt_views_are_used_as_is(tmp_path):
+    from p3dbench.metrics.judge import _gt_judge_views_or_render
+
+    shipped = []
+    for i in range(4):
+        p = tmp_path / f"view_{i:03d}.png"
+        p.write_bytes(b"")
+        shipped.append(p)
+    views = _gt_judge_views_or_render(_ctx(_FakeResolved(_case(), gt_renders=shipped)))
+    assert views == [str(p) for p in shipped]
+
+
+def test_gt_views_are_rendered_from_the_mesh_and_cached(tmp_path, monkeypatch):
+    """Text-to-3D ships no GT views, so they get rendered once and reused."""
+    import p3dbench.metrics.judge as J
+
+    mesh = tmp_path / "gt.stl"
+    mesh.write_bytes(b"")
+    calls = []
+
+    def fake_render(source, out_dir, n_views=4, **kwargs):
+        calls.append(str(source))
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        written = []
+        for i in range(n_views):
+            p = out_dir / f"view_{i:03d}.png"
+            p.write_bytes(b"")
+            written.append(str(p))
+        return written
+
+    monkeypatch.setattr(J, "_render_pred_multiview", fake_render)
+    ctx = _ctx(_FakeResolved(_case(), gt_mesh=mesh))
+
+    first = J._gt_judge_views_or_render(ctx)
+    assert len(first) == 4
+    assert calls == [str(mesh)]
+    # Ordered by view index, so PRED view i pairs with GT view i.
+    assert [Path(p).name for p in first] == [f"view_{i:03d}.png" for i in range(4)]
+
+    second = J._gt_judge_views_or_render(ctx)
+    assert second == first
+    assert calls == [str(mesh)]        # cached: rendered once per case, not per run
+
+
+def test_missing_gt_mesh_skips_instead_of_raising(tmp_path):
+    from p3dbench.metrics.judge import _gt_judge_views_or_render
+
+    assert _gt_judge_views_or_render(_ctx(_FakeResolved(_case()))) == []
