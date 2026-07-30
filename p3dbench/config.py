@@ -8,6 +8,7 @@ the environment / ``.env`` — never in YAML.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -27,6 +28,22 @@ PROVIDER_ALIASES = {
 }
 
 
+def _strip_inline_comment(value: str) -> str:
+    """Drop a trailing ``# comment`` from an unquoted .env value.
+
+    ``.env.example`` documents each key with an aligned inline comment, so a
+    user who fills the key in place would otherwise get the comment baked into
+    the secret. A ``#`` only starts a comment when it opens the value or
+    follows whitespace; quote the value to keep a literal ``#``.
+    """
+    if value[:1] in ("'", '"'):
+        quote = value[0]
+        end = value.find(quote, 1)
+        return value[1:end] if end > 0 else value[1:]
+    match = re.search(r"(?:^|\s)#", value)
+    return (value[: match.start()] if match else value).strip()
+
+
 def load_dotenv(path: Path = Path(".env")) -> None:
     """Tiny .env loader (KEY=VALUE lines). Existing env vars are not overridden."""
     if not Path(path).exists():
@@ -36,7 +53,7 @@ def load_dotenv(path: Path = Path(".env")) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, value = line.partition("=")
-        key, value = key.strip(), value.strip().strip("'\"")
+        key, value = key.strip(), _strip_inline_comment(value.strip())
         if key and value and key not in os.environ:
             os.environ[key] = value
 

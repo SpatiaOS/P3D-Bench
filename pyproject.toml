@@ -42,8 +42,12 @@ render = [
     "pyrender>=0.1.45",
     "pillow>=10.0",
 ]
-# CadQuery output format (also pulled in by [geometry]).
-cadquery = ["cadquery>=2.4"]
+# CadQuery output format, end to end. The CadQuery subprocess emits STEP, and
+# turning that STEP into the STL every metric reads goes through the shared
+# OCP + trimesh mesher (p3dbench/compile/step_mesh.py) — which calls
+# trimesh.process(validate=True), i.e. scipy.sparse.csgraph. cadquery declares
+# none of these, so without them the format compiles to 0 valid cases.
+cadquery = ["cadquery>=2.4", "numpy>=1.24", "scipy>=1.10", "trimesh>=4.0"]
 all = ["p3dbench[geometry,render,cadquery]"]
 
 [project.scripts]

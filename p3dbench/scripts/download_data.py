@@ -21,6 +21,25 @@ HF_REPO_ID = "SpatiaOS/P3D-Bench"
 HF_URL = f"https://huggingface.co/datasets/{HF_REPO_ID}"
 
 
+def _preflight_full_deps(tasks: tuple[str, ...], max_edge: int = 0) -> None:
+    """Fail fast if the optional stack a full-split build needs is missing.
+
+    Only Text-to-3D compiles anything: it turns every GT minimal-JSON program
+    into STEP+STL, so it needs the geometry stack. Image-/Assembly-3D just copy
+    prepared assets out of the cache and need nothing extra (Pillow only when
+    ``--max-edge`` asks for a downscale). Without this check a missing
+    dependency merely logs each case as skipped and the build 'succeeds' with
+    0 cases.
+    """
+    from ..utils import require
+
+    if "text-to-3d" in tasks:
+        for module in ("cadquery", "numpy", "scipy", "trimesh"):
+            require(module, "geometry", "Building the Text-to-3D full split")
+    if max_edge:
+        require("PIL.Image", "render", "Downscaling GT renders (--max-edge)")
+
+
 def download(
     split: str = "demo",
     *,
@@ -30,15 +49,16 @@ def download(
     max_edge: int = 0,
     overwrite: bool = False,
     token: Optional[str] = None,
-) -> None:
+) -> int:
+    """Materialize a split. Returns a process exit code (0 = ok)."""
     if split == "demo":
         demo = Path("data/demo")
         manifests = Path("data/manifests")
         if demo.exists() and any(manifests.glob("*_demo.jsonl")):
             print("Demo split already present (ships in-repo under data/demo/).")
-        else:
-            print("Demo split missing — re-checkout the repo; data/demo/ is version-controlled.")
-        return
+            return 0
+        print("Demo split missing — re-checkout the repo; data/demo/ is version-controlled.")
+        return 1
 
     # ---- full split ----
     from ..data.full_builder import DEFAULT_SOURCE_ROOT, ALL_TASKS, build_full
@@ -62,8 +82,13 @@ def download(
                 f"Skipping without a source root: {', '.join(fusion_tasks)}"
             )
         if "text-to-3d" not in sel_tasks:
-            return
+            return 1
         print("Proceeding with text-to-3d from the Hub (no local source root needed).")
+        sel_tasks = ("text-to-3d",)
+
+    # Checked against the tasks actually being built, up front, rather than
+    # skipping every UID one by one and reporting a 0-case 'success'.
+    _preflight_full_deps(tuple(sel_tasks), max_edge)
 
     print(f"Materializing into data/full/ from source-root={src}  tasks={','.join(sel_tasks)}"
           + (f"  limit={limit}" if limit else "") + (f"  max_edge={max_edge}" if max_edge else ""))
@@ -77,7 +102,19 @@ def download(
               f"skipped={tr['skipped']:<4d} -> {tr['manifest']}")
         for uid, why in tr["skipped_detail"]:
             print(f"      - skip {uid}: {why}")
+
+    empty = [t for t, tr in report["tasks"].items() if tr["built"] == 0]
+    if empty:
+        print(
+            f"\nERROR: built 0 cases for {', '.join(empty)} — the manifests are empty, so "
+            "the split is NOT usable.\nEvery UID was skipped; see the reasons above "
+            "(commonly a --source-root that does not hold the\nexpected upstream layout). "
+            "See docs/DATA.md."
+        )
+        return 1
+
     print("\nNext: p3dbench validate --split full")
+    return 0
 
 
 def prepare(
@@ -104,6 +141,7 @@ def prepare(
 
     src = Path(source_root) if source_root else DEFAULT_SOURCE_ROOT
     sel_tasks = tasks or ALL_TASKS
+    _preflight_full_deps(tuple(sel_tasks), max_edge)
 
     if not src.exists():
         print(
@@ -151,12 +189,23 @@ def prepare(
     for task, tr in report["tasks"].items():
         print(f"  {task:12s} built={tr['built']:4d}/{tr['requested']:<4d} "
               f"skipped={tr['skipped']:<4d} -> {tr['manifest']}")
+
+    empty = [t for t, tr in report["tasks"].items() if tr["built"] == 0]
+    if empty:
+        print(
+            f"\nERROR: built 0 cases for {', '.join(empty)} — the manifests are empty, so "
+            "the split is NOT usable.\nCheck that --source-root holds the layout "
+            "docs/DATA.md describes."
+        )
+        return 1
+
     print("\nNext: p3dbench validate --split full")
     return 0
 
 
 if __name__ == "__main__":
     import argparse
+    import sys
 
     ap = argparse.ArgumentParser(description="Download / materialize a P3D-Bench data split")
     ap.add_argument("--split", default="demo", choices=["demo", "full"])
@@ -166,5 +215,6 @@ if __name__ == "__main__":
     ap.add_argument("--max-edge", type=int, default=0)
     ap.add_argument("--overwrite", action="store_true")
     a = ap.parse_args()
-    download(a.split, source_root=a.source_root, tasks=tuple(a.tasks) if a.tasks else None,
-             limit=a.limit, max_edge=a.max_edge, overwrite=a.overwrite)
+    sys.exit(download(a.split, source_root=a.source_root,
+                      tasks=tuple(a.tasks) if a.tasks else None,
+                      limit=a.limit, max_edge=a.max_edge, overwrite=a.overwrite))

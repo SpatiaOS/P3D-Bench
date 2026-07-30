@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import FORMAT_SLUGS, METRIC_SLUGS, TASK_SLUGS, __version__
 from .config import DEFAULT_CONFIG_DIR, load_dotenv
-from .utils import setup_logging
+from .utils import MissingDependencyError, setup_logging
 
 RESULTS_DIR = Path("results")
 
@@ -106,7 +106,7 @@ def cmd_run(args) -> int:
 def cmd_download(args) -> int:
     from .scripts.download_data import download
 
-    download(
+    return download(
         args.split,
         source_root=args.source_root,
         tasks=tuple(args.tasks) if args.tasks else None,
@@ -114,7 +114,6 @@ def cmd_download(args) -> int:
         max_edge=args.max_edge,
         overwrite=args.overwrite,
     )
-    return 0
 
 
 def cmd_prepare(args) -> int:
@@ -133,7 +132,7 @@ def cmd_prepare(args) -> int:
 def cmd_validate(args) -> int:
     from .data.validate import validate_split
 
-    report = validate_split(args.split)
+    report = validate_split(args.split, tasks=tuple(args.tasks) if args.tasks else None)
     print(f"split={report['split']}  ok={report['ok']}")
     for task, tr in report["tasks"].items():
         print(f"  {task:12s} {tr.get('status','?'):10s} cases={tr.get('cases',0)} "
@@ -239,6 +238,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("validate", help="manifest integrity + referenced-file check")
     sp.add_argument("--split", default="demo", choices=["demo", "full"])
+    sp.add_argument("--tasks", nargs="*", choices=TASK_SLUGS, default=None,
+                    help="subset of tasks to check (default: all)")
     sp.set_defaults(func=cmd_validate)
 
     return p
@@ -248,7 +249,16 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     setup_logging(getattr(args, "verbose", False))
     load_dotenv()
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (MissingDependencyError, ValueError) as exc:
+        # Missing optional extras and unsupported task/format pairs are user
+        # errors, not crashes — report them as one line, not a traceback.
+        # ``-v`` still re-raises so a genuine internal ValueError stays debuggable.
+        if getattr(args, "verbose", False):
+            raise
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

@@ -52,7 +52,9 @@ def _build_workplane(euler_angles_deg, translation):
         euler_angles_deg: ``[angle_z, angle_y, angle_x]`` in degrees (ZYX).
         translation: ``[tx, ty, tz]`` origin offset.
     """
-    from scipy.spatial.transform import Rotation as R
+    R = require(
+        "scipy.spatial.transform", _GEOMETRY_EXTRA, "Text2CAD minimal-JSON compile"
+    ).Rotation
 
     cq = _cq()
     np = require("numpy", _GEOMETRY_EXTRA, "Text2CAD minimal-JSON compile")

@@ -75,8 +75,8 @@ pip install -e .
 ```
 
 Heavy geometry/render dependencies are **optional extras**, installed only for the metric
-buckets that need them. For the in-repo demo smoke test, the core install is enough when
-you use `--dry-run`; real geometry scoring needs the geometry extra.
+buckets and output formats that need them. For the in-repo demo smoke test, the core
+install is enough when you use `--dry-run`; real geometry scoring needs the geometry extra.
 
 ```bash
 pip install -e ".[geometry]"   # OCC/OCP + trimesh → Geometry / Topology / Part metrics
@@ -85,9 +85,19 @@ pip install -e ".[cadquery]"   # CadQuery output format
 pip install -e ".[all]"        # everything
 ```
 
-External runtimes (not pip extras): the **`openscad`** binary for the OpenSCAD format, and
-**Node.js** for the Three.js format (the Three.js runtime itself ships vendored under
-`p3dbench/compile/three/`, so no `npm install` is needed).
+Each **output format** must also be compiled to STL before any metric can read it, so pick
+the extra that matches the `--format` you plan to run:
+
+| `--format` | Needed to compile it |
+|------------|----------------------|
+| `openscad` | the **`openscad`** binary (external runtime, no pip extra) |
+| `threejs` | **Node.js** (the Three.js runtime ships vendored under `p3dbench/compile/three/`, so no `npm install` is needed) |
+| `cadquery` | `pip install -e ".[cadquery]"` |
+| `minimal-json` | `pip install -e ".[geometry]"` (the Text2CAD interpreter needs SciPy) |
+
+`openscad` and `threejs` write STL directly from their own runtime, so they compile on the
+core install; `cadquery` and `minimal-json` go through the shared OCP + trimesh mesher and
+report 0 valid cases without the extra above.
 
 ### 2. API keys
 
@@ -153,11 +163,23 @@ p3dbench download --split demo
 p3dbench validate --split demo
 ```
 
-For the full 400 / 400 / 203 split the flow is three explicit stages —
-**download → prepare → eval**. HuggingFace ships only the UID lists + annotations
-(no raw geometry); the upstream CAD data is obtained under its own license and the
-`prepare` stage builds the evaluator-ready `data/full/` tree from it (see
-[Dataset](#dataset) and [docs/DATA.md](docs/DATA.md)):
+For the full 400 / 400 / 203 split, how much you need locally depends on the task.
+
+**Text-to-3D needs nothing local.** Its 400 GT programs are Text2CAD-derived, which is
+redistributable under CC BY-NC-SA 4.0, so they ship on the Hub and materialize in one
+command:
+
+```bash
+pip install -e ".[geometry]"                        # the GT programs are compiled while materializing
+p3dbench download --split full --tasks text-to-3d   # 400 cases, straight from HuggingFace
+p3dbench validate --split full --tasks text-to-3d
+```
+
+**Image-to-3D and Assembly-3D need the upstream Fusion 360 Gallery geometry**, which
+Autodesk's license does not let us redistribute — the Hub ships their UID lists,
+annotations and QA banks, but not the raw CAD. Obtain it under its own license, point
+`--source-root` at it, and the `download` / `prepare` stages build the evaluator-ready
+`data/full/` tree from it (see [Dataset](#dataset) and [docs/DATA.md](docs/DATA.md)):
 
 ```bash
 # A) If you already have the research-prepared _shared_cache (one-click):
@@ -166,15 +188,19 @@ p3dbench download --split full --source-root /path/to/cad_dataset   # materializ
 # B) If you have only the raw upstream (Fusion 360 Gallery + Text2CAD v1.1):
 p3dbench prepare --split full --source-root /path/to/cad_dataset    # build _shared_cache from raw, then materialize
 
-p3dbench validate --split full     # add --tasks / --limit to either command to try a subset
+p3dbench validate --split full
 ```
 
+`download`, `prepare` and `validate` all take `--tasks` to work on a subset (`download` and
+`prepare` also take `--limit`).
 `prepare` reuses an existing `_shared_cache` when present (so path A keeps working
 unchanged) and otherwise reproduces it with the same data-processing pipeline as the
 research repo: the **input** image is an OCC single-view render and the **judge**
 images are Blender clay multiviews. It needs the `geometry` + `render` extras, a
 Blender binary on `$P3DBENCH_BLENDER`, and Xvfb + OCP (OCP ships with the `cadquery`
-extra). Text-to-3D only needs Text2CAD minimal-JSON (no Blender).
+extra). Running `prepare` for Text-to-3D needs no Blender (its cache holds only the OCC
+single view), but it does still render that view, so Xvfb + OCP are required. The Hub-only
+`download` path above needs neither — just the `geometry` extra.
 
 **2. Smoke-test prompt construction without API keys:**
 
@@ -224,18 +250,25 @@ ships with the case, e.g. the demo split).
 - **Demo split** (3 cases per task) ships in [`data/demo/`](data/demo/) with manifests
   under [`data/manifests/`](data/manifests/) — a zero-setup smoke test.
 - **Full split** (Text-to-3D 400 / Image-to-3D 400 / Assembly-3D 203).
-  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench) publishes the
-  redistributable part — the benchmark **UID lists**, the P3D-derived **text /
-  assembly annotations**, and the Text-to-3D **QA banks** (the MCQ banks scored by
-  the Judge bucket) — but not the upstream raw geometry. The CLI bridges that
-  gap in three stages: **download** (UID lists + annotations + QA banks from the Hub),
-  **prepare** (build the per-case `_shared_cache` from a local copy of the upstream
-  Fusion 360 Gallery + Text2CAD trees, then materialize `data/full/` +
-  `data/manifests/*_full.jsonl`), and **eval**. `p3dbench prepare --source-root <path>`
-  reproduces the cache with the research data-processing pipeline (OCC single-view
-  input + Blender clay judge multiviews); a prebuilt `_shared_cache` is auto-detected
-  and reused. See [docs/DATA.md](docs/DATA.md) for the expected `--source-root` layout,
-  the prepare stage, and licensing.
+  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench) publishes
+  everything redistributable — the benchmark **UID lists**, the P3D-derived **text /
+  assembly annotations**, the Text-to-3D **QA banks** (the MCQ banks scored by the
+  Judge bucket), and the **400 Text-to-3D GT programs** themselves (Text2CAD-derived
+  minimal-JSON, CC BY-NC-SA 4.0).
+  - **Text-to-3D** therefore needs no local upstream at all:
+    `p3dbench download --split full --tasks text-to-3d` materializes all 400 cases
+    from the Hub.
+  - **Image-to-3D / Assembly-3D** additionally need the upstream **Fusion 360 Gallery**
+    raw geometry, which Autodesk's license does not permit us to redistribute. Obtain it
+    yourself, then let the CLI bridge the gap: **download** (Hub metadata + materialize
+    from a prebuilt `_shared_cache`) or **prepare** (build the per-case `_shared_cache`
+    from the raw trees first), each writing `data/full/` + `data/manifests/*_full.jsonl`.
+    `p3dbench prepare --source-root <path>` reproduces the cache with the research
+    data-processing pipeline (OCC single-view input + Blender clay judge multiviews);
+    a prebuilt `_shared_cache` is auto-detected and reused.
+
+  See [docs/DATA.md](docs/DATA.md) for the expected `--source-root` layout, the prepare
+  stage, and licensing.
 
 <div align="center">
 <img src="assets/dataset_gallery.png" width="92%" alt="P3D-Dataset gallery spanning easy to hard difficulty for Text-to-3D and Image-to-3D."/>
