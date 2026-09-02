@@ -1,8 +1,9 @@
-"""Optional Blender-clay multiview renderer for the Judge bucket.
+"""Preferred Blender-clay multiview renderer for the Judge bucket.
 
-A thin OPTIONAL alternative to :mod:`p3dbench.render.occ`. The demo judge
-defaults to the pyrender path (``occ.py``); this module is only used when a
-Blender binary is configured via the ``P3DBENCH_BLENDER`` environment variable.
+The Judge dispatch prefers this renderer so PRED views match the shipped
+Blender-clay GT panels. :mod:`p3dbench.render.occ` (the legacy-named pyrender
+backend) is used only as a compatibility fallback when a Blender binary is not
+configured via ``P3DBENCH_BLENDER`` or Blender rendering fails.
 
 Output is a porcelain "white clay" render (Cycles, warm key + cool fill + rim
 three-point rig over a subtle studio gradient) -- paper-figure quality. The

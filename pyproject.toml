@@ -35,7 +35,8 @@ geometry = [
     "manifold3d>=2.0",
     "cadquery>=2.4",
 ]
-# Judge multiview renders (pyrender path; Blender is an external binary).
+# Judge multiview renders (Blender clay preferred; pyrender is the fallback,
+# while Blender itself remains an external binary configured separately).
 render = [
     "numpy>=1.24",
     "trimesh>=4.0",

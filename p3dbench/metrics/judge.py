@@ -862,10 +862,15 @@ N_JUDGE_VIEWS = len(JUDGE_VIEW_INDICES)
 
 def _render_pred_multiview(mesh_or_step_path: str, output_dir: Path,
                            n_views: int = N_JUDGE_VIEWS) -> List[str]:
-    """Render ``n_views`` of the prediction, preferring occ/pyrender then blender.
+    """Render ``n_views`` of the prediction, preferring Blender clay.
 
-    Returns the list of view PNG paths, or ``[]`` on any failure (so the judge
-    cleanly skips when no render backend is installed).
+    The shipped Image-/Assembly-3D GT panels are Blender-clay renders, so using
+    Blender for PRED first keeps material, lighting, background and resolution
+    consistent across each judge pair. Pyrender remains a compatibility fallback
+    for environments without a working Blender binary.
+
+    Returns the list of view PNG paths, or ``[]`` when neither backend can
+    render the complete view set (so the judge cleanly skips the case).
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     # Import the render backends lazily so this module imports without them.
@@ -875,7 +880,10 @@ def _render_pred_multiview(mesh_or_step_path: str, output_dir: Path,
         logger.debug("render backends unavailable: %s", exc)
         return []
 
-    for backend in (occ, blender):
+    # Keep this order aligned with the benchmark's data/render protocol. The
+    # module named ``occ`` is the legacy pyrender multiview implementation;
+    # actual OCC input rendering lives in ``occ_single.py``.
+    for backend in (blender, occ):
         renderer = getattr(backend, "render_multiview", None)
         if renderer is None:
             continue

@@ -154,3 +154,50 @@ def test_missing_gt_mesh_skips_instead_of_raising(tmp_path):
     from p3dbench.metrics.judge import _gt_judge_views_or_render
 
     assert _gt_judge_views_or_render(_ctx(_FakeResolved(_case()))) == []
+
+
+# -- Judge render backend policy -------------------------------------------
+def test_judge_multiview_prefers_blender_clay(tmp_path, monkeypatch):
+    """Shipped GT panels are Blender clay, so PRED must try Blender first."""
+    import p3dbench.metrics.judge as J
+    from p3dbench.render import blender, occ
+
+    calls = []
+    expected = [str(tmp_path / f"blender_{i}.png") for i in range(4)]
+
+    def fake_blender(source, output_dir, n_views=4):
+        calls.append("blender_clay")
+        return expected
+
+    def fake_pyrender(source, output_dir, n_views=4):
+        calls.append("pyrender")
+        return [str(tmp_path / f"pyrender_{i}.png") for i in range(4)]
+
+    monkeypatch.setattr(blender, "render_multiview", fake_blender)
+    monkeypatch.setattr(occ, "render_multiview", fake_pyrender)
+
+    assert J._render_pred_multiview("prediction.stl", tmp_path) == expected
+    assert calls == ["blender_clay"]
+
+
+def test_judge_multiview_falls_back_to_pyrender(tmp_path, monkeypatch):
+    """Pyrender keeps the public evaluator usable when Blender is unavailable."""
+    import p3dbench.metrics.judge as J
+    from p3dbench.render import blender, occ
+
+    calls = []
+    expected = [str(tmp_path / f"pyrender_{i}.png") for i in range(4)]
+
+    def fake_blender(source, output_dir, n_views=4):
+        calls.append("blender_clay")
+        return []
+
+    def fake_pyrender(source, output_dir, n_views=4):
+        calls.append("pyrender")
+        return expected
+
+    monkeypatch.setattr(blender, "render_multiview", fake_blender)
+    monkeypatch.setattr(occ, "render_multiview", fake_pyrender)
+
+    assert J._render_pred_multiview("prediction.stl", tmp_path) == expected
+    assert calls == ["blender_clay", "pyrender"]

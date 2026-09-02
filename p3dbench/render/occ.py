@@ -1,4 +1,4 @@
-"""Pyrender multiview renderer for the Judge bucket (extra: ``render``).
+"""Pyrender fallback multiview renderer for the Judge bucket (extra: ``render``).
 
 Ports the canonical render geometry from the source ``render/mesh_utils.py`` +
 ``render/render.py``:
