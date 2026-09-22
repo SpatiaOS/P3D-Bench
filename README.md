@@ -17,7 +17,7 @@
 
 <img src="assets/teaser.png" width="100%" alt="Per-task model scores across Text-to-3D, Image-to-3D, and Assembly-3D."/>
 
-<sub><b>Scores of different models across the three tasks in P3D-Bench.</b> Each task score is the average of that task's applicable metric buckets (Geometry, Topology, Judge, plus Part for Assembly-3D), rescaled to 0–100.</sub>
+<sub><b>Model scores under the original release protocol.</b> See <a href="docs/METRICS.md">Metrics</a> for the current scoring definitions.</sub>
 
 </div>
 
@@ -25,6 +25,7 @@
 
 ## News
 
+- **[2026-09]** [Scoring update](docs/METRICS.md): Geo excludes F@0.05; Part uses 3% / 2048 samples; Topology is reported separately from Score.
 - **[2026-06]** 🎉 We released **P3D-Bench** — the paper ([arXiv](https://arxiv.org/abs/2606.11152)), the evaluation code, and the **[Dataset](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)** on HuggingFace.
 
 ---

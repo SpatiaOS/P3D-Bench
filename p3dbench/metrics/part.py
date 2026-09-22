@@ -69,10 +69,19 @@ def _load_mesh(path):
 
 
 def _sample_points(mesh, n_pts: int):
-    """Deterministic surface sampling (seed=42), shared with the geometry bucket."""
-    from .geometry import _sample_points as _gs
+    """Reproduce the audited seed-42 legacy MT19937 uniform sequence.
 
-    return _gs(mesh, n_pts)
+    Pass the RNG explicitly: Trimesh 5 ignores np.random.seed() when sampling
+    with seed=None. This also leaves the caller's global RNG state untouched.
+    """
+    np = _np()
+    legacy_state = np.random.RandomState(42).get_state()
+    bit_generator = np.random.MT19937()
+    bit_generator.state = {"bit_generator": "MT19937", "state": {
+        "key": legacy_state[1], "pos": legacy_state[2]}}
+    rng = np.random.Generator(bit_generator)
+    points, _ = _trimesh().sample.sample_surface(mesh, n_pts, seed=rng)
+    return points
 
 
 # --------------------------------------------------------------------------
@@ -82,11 +91,11 @@ def _sample_points(mesh, n_pts: int):
 # at tau = F_SCORE_TAU_FRAC * diag_gt is at least F_SCORE_MIN. tau scales with
 # each GT part's own bbox diagonal in the shared GT-normalised frame, so the
 # criterion is dimensionless and unbiased across part sizes (Tatarchenko et al.
-# CVPR'19 convention). F1 = 0.7 is the boundary "shape correct AND size within
-# ~10-12%". The historical fixed CD cap (CD_HARD_MAX = 0.01) was replaced by this
+# CVPR'19 convention). The historical fixed CD cap (CD_HARD_MAX = 0.01)
+# was replaced by this
 # F-Score@tau because CD scales with extent^2 (too lenient on small parts, too
 # strict on large ones) — do not reintroduce it.
-F_SCORE_TAU_FRAC = 0.05
+F_SCORE_TAU_FRAC = 0.03
 F_SCORE_MIN = 0.7
 
 # Significant-figures quantization for the geometric fingerprint used in
@@ -97,9 +106,8 @@ F_SCORE_MIN = 0.7
 GT_DEDUP_SIG = 5
 PRED_DEDUP_SIG = 3
 
-# Surface samples per part for the pair CD/F-Score. 1024 is enough for
-# rank-stable matching at part-level scale.
-N_SAMPLE_POINTS = 1024
+# The tighter 3% radius uses 2048 samples to limit sampling error.
+N_SAMPLE_POINTS = 2048
 
 # Fidelity gate defaults (the gate only fires on a well-formed dict).
 FIDELITY_CD_MAX = 5e-4
@@ -1044,6 +1052,13 @@ class _PartBucket(MetricBucket):
             "part_match_p": alignment.get("match_precision"),
             "part_match_r": alignment.get("match_recall"),
             "part_fs_normalized": per_part_mean.get("f_score_normalized"),
+            "part_protocol": {
+                "tau_fraction": F_SCORE_TAU_FRAC,
+                "sample_points": N_SAMPLE_POINTS,
+                "acceptance_fscore": F_SCORE_MIN,
+                "sampling_seed": 42,
+                "sampling_rng": "MT19937 legacy uniform sequence with explicit Generator",
+            },
         }
         if result.get("fidelity_excluded"):
             out["part_note"] = "fidelity_excluded"

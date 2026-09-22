@@ -99,8 +99,9 @@ METRIC_SPECS: dict[str, MetricSpec] = {
 }
 
 ALL_BUCKETS = ("valid", "geometry", "topology", "judge", "part")
-# Buckets that contribute to the headline Score (Valid reported alongside, excluded).
-SCORE_BUCKETS = ("geometry", "topology", "judge", "part")
+# Topology and Valid remain reported, but do not contribute to the headline.
+SCORE_BUCKETS = ("geometry", "judge", "part")
+AGGREGATION_REVISION = "p3d-scoring-20260916"
 
 
 # --------------------------------------------------------------------------
@@ -111,7 +112,8 @@ def bucket_membership(task: str, text_mode: str = "parametric") -> dict[str, lis
 
     ``text_mode`` ('parametric' | 'descriptive') only matters for Text-to-3D.
     """
-    geo = ["chamfer_distance", "f_score_005", "f_score_001", "normal_consistency", "iou"]
+    # F@.05 remains available in raw measurements as an auxiliary diagnostic.
+    geo = ["chamfer_distance", "f_score_001", "normal_consistency", "iou"]
     topo = ["no_open_edge", "inverted_normal_ratio", "non_manifold_edge_ratio"]
 
     if task == "text-to-3d":

@@ -36,13 +36,15 @@ assemblies use exterior-only sampling so fused outputs compare fairly to unfused
 | Metric | Dir | Definition |
 |--------|:---:|------------|
 | **CD** | ↓ | squared bidirectional Chamfer distance |
-| **F@.05** | ↑ | F-score at τ = 0.05·scale |
+| **F@.05** | ↑ | auxiliary F-score at τ = 0.05·scale; excluded from Geo |
 | **F@.01** | ↑ | F-score at τ = 0.01·scale |
 | **NC** | ↑ | normal consistency (mean of precision/recall) |
 | **IoU** | ↑ | IoU_C (manifold boolean) for Text-param; IoU_V (128³ voxel) otherwise |
 
 IoU is computed **only when both meshes have zero open edges**; otherwise it is
 reported as `None` and dropped from the bucket mean for that case.
+Geo is the mean of normalized CD, F@.01, NC, and applicable IoU. A measured
+IoU of zero stays in the mean; an invalid prediction still contributes zero.
 
 ## Topology (predicted mesh only)
 
@@ -82,13 +84,17 @@ After the decomposition step (see [TASKS.md](TASKS.md)), GT and predicted parts
 are deduplicated by a rotation/translation-invariant geometric fingerprint,
 placed in a shared frame (pred reuses the Geometry stage's alignment transform),
 matched per-pair over the 24 proper cube rotations by a coverage F-score
-(τ = 0.05·GT-part-diagonal, 1024 points/part), and assigned via the Hungarian
+(τ = 0.03·GT-part-diagonal, 2048 points/part), and assigned via the Hungarian
 algorithm.
+The diagonal uses the sampled GT-part bounding box; sampling uses an explicit
+seed-42 MT19937 generator reproducing the legacy uniform sequence.
 
 | Metric | Dir | Definition |
 |--------|:---:|------------|
 | **PartFS** | ↑ | mean per-part F-score over all Hungarian pairs |
 | **PartMatchF1** | ↑ | F1 of successful matches (F_part ≥ 0.7): P = M/m, R = M/n |
+
+Part = mean(PartFS, PartMatchF1); `part_fs_normalized` is diagnostic only.
 
 A case whose decomposition fails the fidelity gate (CD > 5e-4 **and** IoU_V <
 0.95 vs the stage-1 union) is excluded from Part means.
@@ -108,8 +114,20 @@ A case whose decomposition fails the fidelity gate (CD > 5e-4 **and** IoU_V <
    A model that answered with unusable or uncompilable code is a model failure and
    stays worst-filled. Re-run the failed cases before quoting a Score — a high
    `llm_fail_rate` means the Score covers a smaller, self-selected subset.
-4. **Score** (the headline figure) = mean of the non-Valid buckets, ×100, averaged
-   over a task's supported formats. Valid is reported alongside, never folded in.
+4. **Score** excludes both Topology and Valid, which remain separate columns:
+   - Image-to-3D: `100 × mean(Geo, Judge)`.
+   - Assembly-3D: `100 × mean(Geo, Judge, Part)`.
+   - Text-to-3D: `100 × mean(Desc-Judge, Param-Geo, Param-Judge)`.
 
-Diagnostics emitted but not bucket members: Hausdorff distance, PartMatchP/R,
+`summarize` reports per-format groups, keeping Text modes separate. Task
+headlines require averaging each component over the supported formats before
+applying the formulas above; do not average the two Text mode Scores.
+Partial-metric runs report partial scores; Topology/Valid-only runs have no Score.
+
+Existing Image/Text metrics can be reaggregated with `summarize`. Assembly Part
+must be remeasured from saved parts at 3% / 2048; `score --metric part` runs
+decomposition again. Summaries record `aggregation_revision`; new Part results
+record their measurement settings in `part_protocol`.
+
+Diagnostics emitted but not bucket members: F@.05, Hausdorff distance, PartMatchP/R,
 visible-view and sequence metrics. They do not affect the Score.

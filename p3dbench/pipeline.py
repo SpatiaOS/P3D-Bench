@@ -19,6 +19,7 @@ from .config import DEFAULT_CONFIG_DIR, load_judge_config
 from .data.loader import ResolvedCase, data_root, load_cases
 from .data.schema import Case
 from .metrics.base import (
+    AGGREGATION_REVISION,
     SCORE_BUCKETS,
     ScoreContext,
     bucket_score_for_case,
@@ -416,10 +417,13 @@ def summarize(metrics_path: Path, *, out: Path) -> Path:
     rows = list(read_jsonl(metrics_path))
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for row in rows:
-        groups[(row["task"], row["format"], row["model"])].append(row)
+        text_mode = row.get("text_mode", "parametric") if row["task"] == "text-to-3d" else None
+        groups[(row["task"], row["format"], row["model"], text_mode)].append(row)
 
-    summary = {"groups": []}
-    for (task, fmt, model), grp in groups.items():
+    # This identifies aggregation only; old raw Part measurements must be
+    # recomputed before claiming the new measurement protocol.
+    summary = {"aggregation_revision": AGGREGATION_REVISION, "groups": []}
+    for (task, fmt, model, text_mode), grp in groups.items():
         n = len(grp)
         # An LLM API failure means the case was never tested: it is dropped from
         # every metric AND from the Valid denominator, and reported on its own as
@@ -435,7 +439,9 @@ def summarize(metrics_path: Path, *, out: Path) -> Path:
                 task, r["raw_metrics"], r["valid"], r.get("text_mode", "parametric")
             )
             for b, v in per_bucket.items():
-                if v is not None:
+                # A topology-only run must not acquire zero-valued headline
+                # buckets just because one of its predictions is invalid.
+                if v is not None and ("buckets" not in r or b in r["buckets"]):
                     bucket_sums[b].append(v)
         bucket_means = {b: (sum(v) / len(v)) for b, v in bucket_sums.items() if v}
         score_buckets = [bucket_means[b] for b in SCORE_BUCKETS if b in bucket_means]
@@ -445,6 +451,7 @@ def summarize(metrics_path: Path, *, out: Path) -> Path:
                 "task": task,
                 "format": fmt,
                 "model": model,
+                **({"text_mode": text_mode} if text_mode is not None else {}),
                 "n_cases": n,
                 "n_tested": n_tested,
                 "llm_fail_cases": n_llm_fail,
