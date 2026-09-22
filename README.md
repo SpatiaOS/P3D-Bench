@@ -17,7 +17,7 @@
 
 <img src="assets/teaser.png" width="100%" alt="Per-task model scores across Text-to-3D, Image-to-3D, and Assembly-3D."/>
 
-<sub><b>Model scores under the original release protocol.</b> See <a href="docs/METRICS.md">Metrics</a> for the current scoring definitions.</sub>
+<sub><b>Model scores on 100-case subsets of the three P3D-Bench tasks.</b> Scores average task-specific fidelity buckets on a 0–100 scale; Topology and Validity are reported separately.</sub>
 
 </div>
 
@@ -25,272 +25,112 @@
 
 ## News
 
-- **[2026-09]** [Scoring update](docs/METRICS.md): Geo excludes F@0.05; Part uses 3% / 2048 samples; Topology is reported separately from Score.
+- **[2026-09]** Updated geometry scoring thresholds and evaluated new models on **100-case subsets of each task**.
 - **[2026-06]** 🎉 We released **P3D-Bench** — the paper ([arXiv](https://arxiv.org/abs/2606.11152)), the evaluation code, and the **[Dataset](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)** on HuggingFace.
 
 ---
 
 ## Abstract
 
-Multimodal large language models can write code to produce complex programs as well as
-use programs to do 3D modeling, which opens up a new avenue for 3D generation powered by
-their priors, world knowledge and reasoning. Yet existing benchmarks rarely evaluate 3D
-modeling through code. Such modeling demands more than runnable code: from a text or
-visual specification, a model must generate a parametric 3D program that is geometrically
-precise, semantically aligned and assembly-consistent.
+Multimodal large language models can write code to produce complex programs as well as use programs to do 3D modeling, which opens up a new avenue for 3D generation powered by their priors, world knowledge and reasoning. Yet existing benchmarks rarely evaluate 3D modeling through code. Such modeling demands more than runnable code: from a text or visual specification, a model must generate a parametric 3D program that is geometrically precise, semantically aligned and assembly-consistent.
 
-We introduce **P3D-Bench**, a benchmark for parametric 3D generation. Unlike a 3D mesh, a
-parametric 3D program exposes explicit dimensions, construction operations and part
-relations, revealing whether a model recovers a design's structure, not just its
-appearance. Under a unified protocol, P3D-Bench covers three task families
-(**Text-to-3D**, **Image-to-3D** and **Assembly-3D**) and scores each output for
-executability, geometric fidelity, topology, text-grounded constraints, multiview
-semantic alignment and part-level structure. We evaluate frontier MLLMs and text-only LLMs
-on **400 text cases, 400 image cases and 203 annotated assemblies**, with domain-specific
-models as reference points.
+We introduce P3D-Bench, a benchmark for parametric 3D generation. Unlike a 3D mesh, a parametric 3D program exposes explicit dimensions, construction operations and part relations, revealing whether a model recovers a design's structure, not just its appearance. Under a unified protocol, P3D-Bench covers three task families (Text-to-3D, Image-to-3D and Assembly-3D) and scores each output for executability, geometric fidelity, topology, text-grounded constraints, multiview semantic alignment and part-level structure. We construct P3D-Dataset, comprising 400 text cases, 400 image cases, and 203 annotated assemblies.
 
-Our extensive evaluation yields three findings. First, assemblies are the hardest setting,
-where models still fail to compose multiple parts into a coherent structure. Second, models
-can often recover the global shape and semantic identity of the target object, yet fail to
-reproduce the precise parametric geometry specified by the input. Third, part-level
-modeling remains weak on assemblies, where models recover neither the geometry of each part
-nor the right number of parts. These results position P3D-Bench as a benchmark for
-evaluating precise parametric geometry and part-level structure in parametric 3D generation.
+Our evaluation on 100 cases from each task family yields three key findings. First, multi-part generation is substantially more challenging than single-part modeling, with models struggling to compose individual parts into a coherent structure. Second, models can often recover the global shape and semantic identity of the target object, yet fail to reproduce the precise parametric geometry specified by the input. Third, part-level modeling remains weak on assemblies, where models recover neither the geometry of each part nor the right number of parts. These results position P3D-Bench as a benchmark for evaluating precise parametric geometry and part-level structure in parametric 3D generation.
 
 ---
 
-## Environment Setup
+## Setup
 
-### 1. Install
+Requires Python 3.10+.
 
 ```bash
 git clone https://github.com/SpatiaOS/P3D-Bench.git
 cd P3D-Bench
-
-# create an environment (conda or venv)
-conda create -n p3dbench python=3.10 -y
-conda activate p3dbench
-
-# core install (CLI + model adapters + config)
-pip install -e .
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[all]"
+cp .env.example .env
 ```
 
-Heavy geometry/render dependencies are **optional extras**, installed only for the metric
-buckets and output formats that need them. For the in-repo demo smoke test, the core
-install is enough when you use `--dry-run`; real geometry scoring needs the geometry extra.
+Set `OPENROUTER_API_KEY` in `.env` and choose a model in
+[`configs/models.yaml`](configs/models.yaml). See [model configuration](docs/API.md)
+for other providers and local endpoints.
 
-```bash
-pip install -e ".[geometry]"   # OCC/OCP + trimesh → Geometry / Topology / Part metrics
-pip install -e ".[render]"     # pyrender / Blender → Judge multiview renders
-pip install -e ".[cadquery]"   # CadQuery output format
-pip install -e ".[all]"        # everything
-```
-
-Each **output format** must also be compiled to STL before any metric can read it, so pick
-the extra that matches the `--format` you plan to run:
-
-| `--format` | Needed to compile it |
-|------------|----------------------|
-| `openscad` | the **`openscad`** binary (external runtime, no pip extra) |
-| `threejs` | **Node.js** (the Three.js runtime ships vendored under `p3dbench/compile/three/`, so no `npm install` is needed) |
-| `cadquery` | `pip install -e ".[cadquery]"` |
-| `minimal-json` | `pip install -e ".[geometry]"` (the Text2CAD interpreter needs SciPy) |
-
-`openscad` and `threejs` write STL directly from their own runtime, so they compile on the
-core install; `cadquery` and `minimal-json` go through the shared OCP + trimesh mesher and
-report 0 valid cases without the extra above.
-
-### 2. API keys
-
-Bring your own keys. **Secrets never go in YAML** — `configs/models.yaml` holds only
-metadata (provider, model id, base URL, and the *name* of the env var that holds the key);
-`.env.example` lists the key names.
-
-```bash
-cp .env.example .env            # then fill in your keys
-```
-
-```bash
-# .env  (key NAMES only; values stay local)
-OPENROUTER_API_KEY=             # default examples use OpenRouter
-HF_TOKEN=                       # reserved for future full-split downloads
-P3DBENCH_CACHE_DIR=.cache/p3dbench
-```
-
-Register a model by adding a block to `configs/models.yaml` and the matching key in `.env`.
-Any OpenAI-compatible endpoint (OpenRouter, vLLM, LM Studio, …) works via the
-`openai_compatible` provider:
-
-```yaml
-models:
-  qwen:
-    provider: openai_compatible
-    model: qwen/qwen3.6-plus
-    api_key_env: OPENROUTER_API_KEY
-    base_url: https://openrouter.ai/api/v1
-    temperature: 0.7
-    max_tokens: 65536
-
-  local-qwen:
-    provider: openai_compatible
-    model: qwen2.5-vl-instruct
-    api_key_env: OPENROUTER_API_KEY   # set a dummy value if your local server ignores auth
-    base_url: http://localhost:8000/v1
-```
-
----
+Install OpenSCAD for `.scad` output, Node.js for Three.js, and Blender for clay
+renders (`P3DBENCH_BLENDER=/path/to/blender`). See [output formats](docs/FORMATS.md)
+for compiler requirements. A CLI-only smoke test needs just `pip install -e .`.
 
 ## Quick Start
 
 <div align="center">
-<img src="assets/overview.png" width="100%" alt="P3D-Bench overview: three tasks, evaluated models and output formats, and the evaluation metric buckets (Geometry, Topology, Judge, Part)."/>
+<img src="assets/overview.png" width="100%" alt="P3D-Bench overview: task inputs, evaluated models, four output formats, and evaluation metrics."/>
 </div>
 
-An evaluation run is defined by three orthogonal choices — **task**, **output format**, and
-**metric bucket** — that you pin independently from the CLI:
-
-| Axis        | Flag       | Choices |
-|-------------|------------|---------|
-| **Task**    | `--task`   | `text-to-3d` · `image-to-3d` · `assembly-3d` |
-| **Format**  | `--format` | `minimal-json` · `openscad` · `cadquery` · `threejs` |
-| **Metric**  | `--metric` | `valid` · `geometry` · `topology` · `judge` · `part` · `all` |
-
-The CLI validates `--format` against the chosen task's supported formats.
-
-**1. Check the demo data** (a few local cases per task; see [Dataset](#dataset)):
-
-```bash
-p3dbench download --split demo
-p3dbench validate --split demo
-```
-
-For the full 400 / 400 / 203 split, how much you need locally depends on the task.
-
-**Text-to-3D needs nothing local.** Its 400 GT programs are Text2CAD-derived, which is
-redistributable under CC BY-NC-SA 4.0, so they ship on the Hub and materialize in one
-command:
-
-```bash
-pip install -e ".[geometry]"                        # the GT programs are compiled while materializing
-p3dbench download --split full --tasks text-to-3d   # 400 cases, straight from HuggingFace
-p3dbench validate --split full --tasks text-to-3d
-```
-
-**Image-to-3D and Assembly-3D need the upstream Fusion 360 Gallery geometry**, which
-Autodesk's license does not let us redistribute — the Hub ships their UID lists,
-annotations and QA banks, but not the raw CAD. Obtain it under its own license, point
-`--source-root` at it, and the `download` / `prepare` stages build the evaluator-ready
-`data/full/` tree from it (see [Dataset](#dataset) and [docs/DATA.md](docs/DATA.md)):
-
-```bash
-# A) If you already have the research-prepared _shared_cache (one-click):
-p3dbench download --split full --source-root /path/to/cad_dataset   # materialize from a prebuilt cache
-
-# B) If you have only the raw upstream (Fusion 360 Gallery + Text2CAD v1.1):
-p3dbench prepare --split full --source-root /path/to/cad_dataset    # build _shared_cache from raw, then materialize
-
-p3dbench validate --split full
-```
-
-`download`, `prepare` and `validate` all take `--tasks` to work on a subset (`download` and
-`prepare` also take `--limit`).
-`prepare` reuses an existing `_shared_cache` when present (so path A keeps working
-unchanged) and otherwise reproduces it with the same data-processing pipeline as the
-research repo: the **input** image is an OCC single-view render and the **judge**
-images are Blender clay multiviews. It needs the `geometry` + `render` extras, a
-Blender binary on `$P3DBENCH_BLENDER`, and Xvfb + OCP (OCP ships with the `cadquery`
-extra). Running `prepare` for Text-to-3D needs no Blender (its cache holds only the OCC
-single view), but it does still render that view, so Xvfb + OCP are required. The Hub-only
-`download` path above needs neither — just the `geometry` extra.
-
-**2. Smoke-test prompt construction without API keys:**
+Check the bundled demo without making API calls:
 
 ```bash
 MODEL=qwen examples/run_smoke.sh
 ```
 
-The smoke script uses `--dry-run`, so it validates local demo manifests and builds prompts
-without calling a model or compiling generated CAD.
-
-**3. Run one task × one format × one metric with a configured model:**
+Run one Image-to-3D case:
 
 ```bash
 p3dbench run --task image-to-3d --format openscad --metric geometry \
   --model qwen --split demo --limit 1
 ```
 
-`run` chains the four stages and writes results under `results/<run-id>/`. You can also run
-each stage on its own — every stage reads/writes a plain JSONL artifact, with no
-resume/checkpoint state — so you can re-score the *same* predictions under a different
-metric without re-running inference. Each stage defaults its output next to its input, so
-pinning `--out` on `infer` lets the rest chain by bare filename:
+| Option | Choices |
+|--------|---------|
+| `--task` | `text-to-3d` · `image-to-3d` · `assembly-3d` |
+| `--format` | `minimal-json` · `openscad` · `cadquery` · `threejs` |
+| `--metric` | `valid` · `geometry` · `topology` · `judge` · `part` · `all` |
+
+Results are saved under `results/<run-id>/`. The stages also run independently,
+so saved predictions can be rescored:
 
 ```bash
-p3dbench infer     --task text-to-3d --format minimal-json --model qwen --split demo --limit 1 --out predictions.jsonl
-p3dbench compile   --pred predictions.jsonl                              # → compiled.jsonl
-p3dbench score     --compiled compiled.jsonl --metric topology           # → metrics.jsonl
-p3dbench summarize --metrics metrics.jsonl                               # → summary.json
+p3dbench infer --task text-to-3d --format minimal-json --model qwen --split demo --out predictions.jsonl
+p3dbench compile --pred predictions.jsonl
+p3dbench score --compiled compiled.jsonl --metric geometry
+p3dbench summarize --metrics metrics.jsonl
 ```
 
-(Without `--out`, `infer` writes to `results/<run-id>/predictions.jsonl`; point `--pred` at
-that path instead.)
-
-Useful flags: `--limit N` (first N cases), `--dry-run` (build prompts / validate config
-without calling a model), `--split demo`,
-`--refine-attempts N` (Image-/Assembly-3D only: compile-check-retry with error
-feedback, default 3, `1` disables; Text-to-3D is always single-shot),
-`--text-mode {parametric,descriptive}`
-(Text-to-3D only — picks the input spec, parametric vs descriptive, and the metric panel
-reported; descriptive falls back to the parametric text when no descriptive annotation
-ships with the case, e.g. the demo split).
+See [tasks](docs/TASKS.md), [metrics](docs/METRICS.md), and `p3dbench run --help`
+for supported combinations and options.
 
 ---
 
 ## Dataset
 
-- **Demo split** (3 cases per task) ships in [`data/demo/`](data/demo/) with manifests
-  under [`data/manifests/`](data/manifests/) — a zero-setup smoke test.
-- **Full split** (Text-to-3D 400 / Image-to-3D 400 / Assembly-3D 203).
-  [🤗 HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench) publishes
-  everything redistributable — the benchmark **UID lists**, the P3D-derived **text /
-  assembly annotations**, the Text-to-3D **QA banks** (the MCQ banks scored by the
-  Judge bucket), and the **400 Text-to-3D GT programs** themselves (Text2CAD-derived
-  minimal-JSON, CC BY-NC-SA 4.0).
-  - **Text-to-3D** therefore needs no local upstream at all:
-    `p3dbench download --split full --tasks text-to-3d` materializes all 400 cases
-    from the Hub.
-  - **Image-to-3D / Assembly-3D** additionally need the upstream **Fusion 360 Gallery**
-    raw geometry, which Autodesk's license does not permit us to redistribute. Obtain it
-    yourself, then let the CLI bridge the gap: **download** (Hub metadata + materialize
-    from a prebuilt `_shared_cache`) or **prepare** (build the per-case `_shared_cache`
-    from the raw trees first), each writing `data/full/` + `data/manifests/*_full.jsonl`.
-    `p3dbench prepare --source-root <path>` reproduces the cache with the research
-    data-processing pipeline (OCC single-view input + Blender clay judge multiviews);
-    a prebuilt `_shared_cache` is auto-detected and reused.
+[P3D-Dataset on HuggingFace](https://huggingface.co/datasets/SpatiaOS/P3D-Bench)
+contains **400 text cases, 400 image cases, and 203 annotated assemblies**.
+The updated experiments evaluate a fixed **100-case subset per task**;
+the bundled demo includes 3 cases per task.
 
-  See [docs/DATA.md](docs/DATA.md) for the expected `--source-root` layout, the prepare
-  stage, and licensing.
+```bash
+# Full Text-to-3D split, directly from HuggingFace
+p3dbench download --split full --tasks text-to-3d
+
+# Image/Assembly: prepare locally obtained Fusion 360 Gallery geometry
+p3dbench prepare --split full --source-root /path/to/cad_dataset
+```
+
+Fusion 360 raw geometry must be obtained under its upstream license.
+See [data preparation](docs/DATA.md) for the source layout, rendering dependencies,
+and how to reuse an existing cache.
 
 <div align="center">
-<img src="assets/dataset_gallery.png" width="92%" alt="P3D-Dataset gallery spanning easy to hard difficulty for Text-to-3D and Image-to-3D."/>
+<img src="assets/dataset_gallery.jpg" width="92%" alt="P3D-Dataset examples at easy, medium, and hard complexity levels for Text-to-3D and Image-to-3D."/>
 </div>
-
----
 
 ## License
 
-Code and data are licensed separately, and the data follows the terms of its upstream
-sources (**non-commercial research use only, with attribution**):
-
-| Component | Source | License |
-|-----------|--------|---------|
-| **Benchmark code** (this repo) | — | MIT (see [LICENSE](LICENSE)) |
-| **P3D-Dataset — Text-to-3D split** | derived from Text2CAD v1.1 | [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) |
-| **P3D-Dataset — Image-to-3D & Assembly-3D splits** | derived from [Fusion 360 Gallery Dataset](https://github.com/AutodeskAILab/Fusion360GalleryDataset) | [Fusion 360 Gallery Dataset License](https://github.com/AutodeskAILab/Fusion360GalleryDataset/blob/master/LICENSE.md) (Autodesk, non-commercial) |
-
-Both dataset sources permit **non-commercial research use only** and require
-**attribution**; redistributed portions and modifications must carry the same
-restrictions. By using the P3D-Dataset you agree to the upstream license terms.
+Code: [MIT](LICENSE). Dataset use follows the upstream licenses:
+[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) for Text2CAD-derived
+text cases, and the [Fusion 360 Gallery license](https://github.com/AutodeskAILab/Fusion360GalleryDataset/blob/master/LICENSE.md)
+for image and assembly cases. Both datasets are for non-commercial research with attribution;
+see [data licensing](docs/DATA.md#licensing--removal-policy) for details.
 
 ---
 
