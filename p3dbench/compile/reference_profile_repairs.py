@@ -1,7 +1,7 @@
-"""Versioned repairs for four published reference programs, not a scoring change.
+"""Checksum-selected profile repairs for four published reference programs.
 
-Only exact reviewed programs outside the frozen Text100 use repaired profiles.
-All other programs retain the legacy interpreter, including generated outputs.
+Only registered program checksums select the repaired profile builder.
+All other programs retain the existing interpreter behavior.
 Whitespace is ignored; feature, face and curve insertion order is preserved.
 """
 import hashlib

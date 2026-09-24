@@ -2,9 +2,8 @@
 
 # P3D-Bench
 
-Text GT update: four reference programs outside the frozen Text100 now use
-verified profile nesting and extrusion semantics. Dataset programs and reported
-results are unchanged. See [reference repairs and validation scope](docs/DATA.md#versioned-text-reference-repairs).
+Text GT update: profile nesting and hole extrusion are corrected for four
+reference programs. See [reference repairs and validation](docs/DATA.md#versioned-text-reference-repairs).
 
 ### Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning
 
