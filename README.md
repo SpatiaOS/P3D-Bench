@@ -2,8 +2,8 @@
 
 # P3D-Bench
 
-Text GT update: profile nesting and hole extrusion are corrected for four
-reference programs. See [reference repairs and validation](docs/DATA.md#versioned-text-reference-repairs).
+Text GT update: twelve reference programs have checksum-selected geometry
+repairs. See [reference repairs and validation](docs/DATA.md#versioned-text-reference-repairs).
 
 ### Benchmarking MLLMs for Parametric 3D Generation and Structural Reasoning
 

@@ -67,3 +67,63 @@ def test_unregistered_program_uses_original_builder(tmp_path, monkeypatch):
     p.write_text(json.dumps({"parts": {"part_1": feature({"loop_1": circle(2)}, 1, 0)}}))
     assert interpreter.minimal_json_to_solids_assembly(str(p)) == [sentinel]
     assert calls == ["legacy"]
+
+
+def test_precision_records_round_back_and_preserve_features():
+    from p3dbench.compile.reference_geometry import _restore_precision
+    from p3dbench.compile.reference_profile_repairs import program_digest
+    for uid in ["0043_00437520", "0013_00135195", "0009_00098309", "0072_00723126"]:
+        path = Path(__file__).parent / "fixtures/reference_profiles" / (uid + ".json")
+        data = json.loads(path.read_text())
+        before = json.dumps(data)
+        restored = _restore_precision(data, program_digest(data))
+        assert json.dumps(data) == before
+        assert list(restored["parts"]) == list(data["parts"])
+        for key in data["parts"]:
+            for field in ["coordinate_system", "extrusion", "description"]:
+                assert restored["parts"][key][field] == data["parts"][key][field]
+        bad = json.loads(before)
+        first_part = next(iter(bad["parts"].values()))
+        first_curve = next(iter(next(iter(next(iter(first_part["sketch"].values())).values())).values()))
+        first_field = next(iter(first_curve))
+        if isinstance(first_curve[first_field], list):
+            first_curve[first_field][0] += 0.01
+        else:
+            first_curve[first_field] += 0.01
+        with pytest.raises(ValueError, match="published rounding"):
+            _restore_precision(bad, program_digest(data))
+
+
+def test_healing_rejects_empty_shape():
+    import cadquery as cq
+    from p3dbench.compile.reference_geometry import _heal
+    with pytest.raises(ValueError, match="invalid or empty"):
+        _heal(cq.Compound.makeCompound([]))
+
+
+def test_boolean_preserves_analytic_volume():
+    import cadquery as cq
+    from p3dbench.compile.reference_geometry import _boolean
+    a = cq.Workplane("XY").box(2, 2, 2).val()
+    b = cq.Workplane("XY").box(2, 2, 2).translate((1, 0, 0)).val()
+    before = (a.Volume(), b.Volume())
+    assert _boolean(a, b, "fuse").Volume() == pytest.approx(12)
+    assert _boolean(a, b, "cut").Volume() == pytest.approx(4)
+    assert _boolean(a, b, "intersect").Volume() == pytest.approx(4)
+    assert (a.Volume(), b.Volume()) == before
+
+
+@pytest.mark.parametrize("uid", ["0009_00098309", "0072_00723126"])
+def test_precision_repair_survives_step_and_stl_roundtrip(uid, tmp_path):
+    import cadquery as cq
+    trimesh = pytest.importorskip("trimesh")
+    pytest.importorskip("gmsh")
+    from p3dbench.compile.text2cad_interpreter import export_minimal_json
+    from p3dbench.compile.step_mesh import read_step_shape
+    path = Path(__file__).parent / "fixtures/reference_profiles" / (uid + ".json")
+    result = export_minimal_json(str(path), str(tmp_path))
+    assert "error" not in result, result
+    shape = cq.Shape.cast(read_step_shape(Path(result["step"])))
+    assert shape.isValid() and len(shape.Solids()) == 1 and shape.Volume() > 0
+    mesh = trimesh.load(result["stl"], force="mesh")
+    assert len(mesh.faces) > 0 and mesh.is_watertight

@@ -171,8 +171,7 @@ def _build_part_solid(part_name: str, part: dict, json_path: str):
             wp_sketch = _build_wire(wp, outer_loop, scale)
 
             if depth_fwd > 0 and depth_rev > 0:
-                # NOTE (faithfulness): both=True extrudes symmetrically, so an
-                # asymmetric fwd/rev split is approximated. Do not "fix".
+                # Legacy symmetric extrusion approximates asymmetric depths.
                 solid = wp_sketch.extrude(depth_fwd + depth_rev, both=True)
             elif depth_fwd > 0:
                 solid = wp_sketch.extrude(depth_fwd)
@@ -264,7 +263,13 @@ def minimal_json_to_solids_assembly(json_path: str) -> List:
     with open(json_path, 'r') as f:
         data = json.load(f)
 
-    from .reference_profile_repairs import needs_profile_repair
+    from .reference_profile_repairs import needs_profile_repair, needs_geometry_repair, program_digest
+
+    if needs_geometry_repair(data):
+        from .reference_geometry import build_reference_geometry
+        return build_reference_geometry(
+            data, program_digest(data), _build_workplane, _build_wire, _extrude_depth_interval,
+        )
 
     build_part = _build_part_solid_repaired if needs_profile_repair(data) else _build_part_solid
     parts = data.get('parts', {})

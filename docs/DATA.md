@@ -2,33 +2,52 @@
 
 ## Versioned Text reference repairs
 
-The `text-gt-profile-repair-v1` update repairs four exact published GT programs:
+The `text-gt-profile-repair-v2` update repairs twelve exact published GT programs.
+The first four repair profile nesting and signed hole extrusion:
 `0052/00522179`, `0025/00254326`, `0046/00466588`, and `0058/00582353`.
 Profile wires are interpreted by nesting, and holes use the same signed
 extrusion interval as the rest of the face. A failed cut is not replaced by
 an uncut profile. JSON coordinates, task UIDs, annotations and QA banks are
-unchanged.
+unchanged in the published source files.
+
+Eight additional references are repaired: `0043/00437520`, `0073/00734070`,
+`0011/00117335`, `0009/00098309`, `0052/00520870`, `0013/00135195`,
+`0024/00246899`, and `0072/00723126`. Their reconstruction checks each feature
+and Boolean result for a valid, nonempty solid. BRep orientation/connectivity
+is healed, and failed Booleans use bounded tolerance retries with volume checks;
+failed features are never discarded.
+
+For `0043/00437520`, `0013/00135195`, `0009/00098309`, and `0072/00723126`,
+four-decimal sketch rounding creates degenerate or overlapping geometry.
+The bundled `reference_profile_precision.json` restores normalized coordinates
+verified against the corresponding source CAD sequences. Every restored value
+must round back to its published value. Feature order, extrusion parameters and
+coordinate frames are unchanged. This Text2CAD-derived data is licensed under
+CC BY-NC-SA 4.0; attribution and source checksums are included in the file.
 
 Repairs are selected by an order-preserving program checksum in
 [`reference_profile_repairs.py`](../p3dbench/compile/reference_profile_repairs.py).
 Other inputs retain their existing interpreter behavior. This repair applies
-only to the four registered reference programs.
+only to the twelve registered reference programs.
 
 With the updated code, `compile_code(code, "minimal-json", output_dir)` applies
 the registered repair automatically. Existing caches are not overwritten:
 rebuild the affected references into a new output directory before selecting
 them for a new evaluation. Record the code revision with those outputs.
 
-Additional known shape-validity flags under CadQuery 2.7.0 include
-`0043/00437520`, `0073/00734070`, `0011/00117335`,
-`0009/00098309`, `0052/00520870`, `0013/00135195`, `0024/00246899`, and
-`0072/00723126`. Some can still export meshes; an export is not proof of a valid
-solid. They are not repaired or silently excluded by this update. No automatic
-denominator change is introduced. The four repairs do not certify all 400 GTs.
+The twelve repaired references pass STEP readback and nonempty STL export
+checks under CadQuery 2.7.0. Multi-body references retain compound geometry;
+coincident component surfaces need not form a single watertight STL.
+The all-400 construction audit still flags `0070/00706059`, `0093/00937375`,
+`0049/00497058`, `0013/00133189`, `0007/00073282`, and `0018/00189804`.
+They are not repaired or silently excluded by this update. An exported mesh
+alone does not certify solid validity, and no automatic denominator change is
+introduced. This is not a certification of all 400 GTs.
 
 Regression checks: `python -m pytest tests/test_minimal_json_profiles.py`.
 They cover inner-first loops, forward/reverse/asymmetric extrusion, invalid
-profiles, exact-reference selection and the four reported programs. The profile
+profiles, exact-reference selection, source-precision invariants, Boolean volume
+bounds and all twelve repaired programs. The profile
 semantics follow the upstream [Text2CAD face construction](https://github.com/SadilKhan/Text2CAD/blob/669a81472ede2269837c22a4d00070eaac360c82/CadSeqProc/sequence/sketch/face.py#L165)
 and [extrusion interval](https://github.com/SadilKhan/Text2CAD/blob/669a81472ede2269837c22a4d00070eaac360c82/CadSeqProc/sequence/sketch/sketchsequence.py#L258).
 
