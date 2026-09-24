@@ -10,11 +10,11 @@ by the dataset as ``R.from_matrix(np.vstack((x_axis, y_axis, z_axis))).as_euler(
 We rebuild via ``R.from_euler("zyx", angles, degrees=True)`` and read the matrix
 *rows* as ``x_axis``, ``y_axis``, ``normal``.
 
-Faithfulness flags (do NOT silently "fix"):
-  * Two-sided extrusion (both depths > 0) uses CadQuery ``extrude(both=True)``,
-    which is *symmetric* — asymmetric fwd/rev depths are approximated.
-  * Hole loops are extruded single-direction only
-    (``depth_fwd if depth_fwd > 0 else depth_rev``).
+Versioned GT profile repairs (all other programs keep legacy behavior):
+  * All wires of a face are built together; nesting determines holes, not the
+    insertion order of loop keys.
+  * The entire face, including its holes, is extruded over [-reverse, +forward].
+    Asymmetric two-sided depths are not replaced by symmetric extrusion.
   * Parts are iterated in **insertion order** (not lexicographic ``sorted`` as in
     the research code), which matches the ``parts_meta`` insertion-order contract
     and is correct past ``part_9`` / ``part_10``.
@@ -127,6 +127,19 @@ def _build_wire(wp, loop, scale):
     return wp
 
 
+def _extrude_depth_interval(sketch, depth_fwd, depth_rev):
+    """Extrude the complete profile over [-reverse, +forward]."""
+    if depth_fwd > 0 and depth_rev > 0:
+        return sketch.extrude(depth_fwd + depth_rev).translate(
+            sketch.plane.zDir.multiply(-depth_rev)
+        )
+    if depth_fwd > 0:
+        return sketch.extrude(depth_fwd)
+    if depth_rev > 0:
+        return sketch.extrude(-depth_rev)
+    raise ValueError("Extrusion requires a positive forward or reverse depth")
+
+
 def _build_part_solid(part_name: str, part: dict, json_path: str):
     """Build the solid contributed by a single minimal_json feature."""
     ext = part.get('extrusion', {})
@@ -189,6 +202,54 @@ def _build_part_solid(part_name: str, part: dict, json_path: str):
         return None
 
 
+def _build_part_solid_repaired(part_name: str, part: dict, json_path: str):
+    """Build the solid contributed by a single minimal_json feature."""
+    ext = part.get('extrusion', {})
+    if not ext:
+        logger.warning(f"No extrusion info for {part_name} in {json_path}")
+        return None
+
+    scale = 1.0
+    depth_fwd = ext.get('extrude_depth_towards_normal', 0)
+    depth_rev = ext.get('extrude_depth_opposite_normal', 0)
+    trans = part.get('coordinate_system', {}).get('Translation Vector', [0, 0, 0])
+    euler = part.get('coordinate_system', {}).get('Euler Angles', [0, 0, 0])
+
+    sketch = part.get('sketch', {})
+    if not sketch:
+        return None
+
+    try:
+        # Union all extruded faces that belong to the same feature.
+        part_solid = None
+        for face_name, face_data in sketch.items():
+            loops = list(face_data.items())
+            if not loops:
+                continue
+
+            if depth_fwd <= 0 and depth_rev <= 0:
+                continue
+            # A fresh plane per face avoids sharing pending-wire state.
+            # CadQuery/OCC classifies nested wires as outer/hole boundaries.
+            # The upstream format does not guarantee that loop_1 is outer.
+            wp_sketch = _build_workplane(euler, trans)
+            for _, loop in loops:
+                wp_sketch = _build_wire(wp_sketch, loop, scale)
+            solid = _extrude_depth_interval(wp_sketch, depth_fwd, depth_rev)
+            if not solid.val().Solids() or not solid.val().isValid():
+                raise ValueError(f"Invalid extruded face {part_name}/{face_name}")
+
+            if part_solid is None:
+                part_solid = solid
+            else:
+                part_solid = part_solid.union(solid)
+
+        return part_solid
+    except Exception as e:
+        # Do not silently drop a failed feature and export a partial reference.
+        raise ValueError(f"Failed to build {part_name} in {json_path}: {e}") from e
+
+
 def minimal_json_to_solids_assembly(json_path: str) -> List:
     """Convert a Text2CAD minimal JSON file to a list of CadQuery solids.
 
@@ -203,6 +264,9 @@ def minimal_json_to_solids_assembly(json_path: str) -> List:
     with open(json_path, 'r') as f:
         data = json.load(f)
 
+    from .reference_profile_repairs import needs_profile_repair
+
+    build_part = _build_part_solid_repaired if needs_profile_repair(data) else _build_part_solid
     parts = data.get('parts', {})
     if not parts:
         logger.warning(f"No parts found in {json_path}")
@@ -214,7 +278,7 @@ def minimal_json_to_solids_assembly(json_path: str) -> List:
     for part_name in parts.keys():
         part = parts[part_name]
         operation = part.get('extrusion', {}).get('operation', 'NewBodyFeatureOperation')
-        part_solid = _build_part_solid(part_name, part, json_path)
+        part_solid = build_part(part_name, part, json_path)
         if part_solid is None:
             continue
 
@@ -289,6 +353,12 @@ def export_minimal_json(json_path: str, output_dir: str, assembly_mode: bool = T
     step_path = str(output_dir / f"{output_prefix}.step")
 
     try:
+        from .reference_profile_repairs import needs_profile_repair
+
+        with open(json_path) as source:
+            repair = needs_profile_repair(json.load(source))
+        # Only the versioned reference repairs use the finer tessellation.
+        mesh_options = {"linear_deflection": 1e-4, "angular_deflection": 0.3} if repair else {}
         if assembly_mode:
             solids = minimal_json_to_solids_assembly(json_path)
             if not solids:
@@ -310,7 +380,7 @@ def export_minimal_json(json_path: str, output_dir: str, assembly_mode: bool = T
             if status != IFSelect_RetDone:
                 return {"error": "STEP export failed"}
 
-            error, _ = export_step_to_stl(Path(step_path), Path(stl_path))
+            error, _ = export_step_to_stl(Path(step_path), Path(stl_path), **mesh_options)
             if error:
                 raise RuntimeError(error)
 
@@ -320,7 +390,7 @@ def export_minimal_json(json_path: str, output_dir: str, assembly_mode: bool = T
                 return {"error": "Failed to build solid from minimal JSON"}
 
             solid.val().exportStep(step_path)
-            error, _ = export_step_to_stl(Path(step_path), Path(stl_path))
+            error, _ = export_step_to_stl(Path(step_path), Path(stl_path), **mesh_options)
             if error:
                 raise RuntimeError(error)
 

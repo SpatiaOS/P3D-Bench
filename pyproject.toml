@@ -32,6 +32,7 @@ geometry = [
     "numpy>=1.24",
     "scipy>=1.10",
     "trimesh>=4.0",
+    "networkx>=2.8",  # trimesh graph operations for STEP mesh processing
     "manifold3d>=2.0",
     "cadquery>=2.4",
 ]
