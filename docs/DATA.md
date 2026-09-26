@@ -38,11 +38,6 @@ them for a new evaluation. Record the code revision with those outputs.
 The twelve repaired references pass STEP readback and nonempty STL export
 checks under CadQuery 2.7.0. Multi-body references retain compound geometry;
 coincident component surfaces need not form a single watertight STL.
-The all-400 construction audit still flags `0070/00706059`, `0093/00937375`,
-`0049/00497058`, `0013/00133189`, `0007/00073282`, and `0018/00189804`.
-They are not repaired or silently excluded by this update. An exported mesh
-alone does not certify solid validity, and no automatic denominator change is
-introduced. This is not a certification of all 400 GTs.
 
 Regression checks: `python -m pytest tests/test_minimal_json_profiles.py`.
 They cover inner-first loops, forward/reverse/asymmetric extrusion, invalid
